@@ -1,0 +1,17 @@
+﻿== serial / CH343 / CH340 devices (Windows view) ==
+USB Serial Device (COM3) | USB\VID_1A86&PID_55D3\5A7D005963 | status=OK | errcode=0
+Communications Port (COM1) | ACPI\PNP0501\0 | status=OK | errcode=0
+
+== processes that usually hold the Makcu port ==
+none found
+
+== probe: km.version() on every COM port x baud ==
+COM1 @115200 -> len=0 text=[] hex=
+COM1 @4000000 OPEN FAIL: Exception calling "Open" with "0" argument(s): "The parameter is incorrect.
+"
+COM3 @115200 -> len=0 text=[] hex=
+COM3 @4000000 -> len=14 text=[km.MAKCU  >>> ] hex=6B 6D 2E 4D 41 4B 43 55 0D 0A 3E 3E 3E 20
+COM3 @2000000 -> len=0 text=[] hex=
+COM3 @1000000 -> len=0 text=[] hex=
+COM3 @921600 -> len=0 text=[] hex=
+COM3 @460800 -> len=0 text=[] hex=
