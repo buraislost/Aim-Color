@@ -1,0 +1,14 @@
+{
+  "dependencies": [
+    {
+      "name": "imgui",
+      "features": [
+        "dx11-binding",
+        "freetype",
+        "win32-binding"
+      ]
+    },
+    "nlohmann-json",
+    "opencv4"
+  ]
+}

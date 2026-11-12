@@ -1,0 +1,6 @@
+.vs
+build
+vcpkg_installed
+Claude outputs/
+UpgradeLog*.htm
+*.vcxproj.user
