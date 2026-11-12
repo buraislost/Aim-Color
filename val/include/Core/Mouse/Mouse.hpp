@@ -44,6 +44,8 @@ namespace Core
 
 		// Makcu
 		mutable HANDLE port_ = INVALID_HANDLE_VALUE;
+		mutable bool   full_sweep_ = false; // true only while configure() probes, see try_open_port_locked
+		mutable DWORD  baud_       = 115200; // rate that last answered; a Makcu can be left on 4M by another tool
 
 		// Medius: MediusDevice* and the loaded medius_capi.dll, opaque here so this header
 		// does not depend on medius.h

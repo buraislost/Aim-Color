@@ -324,20 +324,21 @@ namespace Core::UI
 					ImGui::SliderInt( "##fov_y", &config->aimbot_.fov_y, 20, 250, "%dpx" );
 
 					ImGui::Text( "Offset (X)" );
-					ImGui::SliderInt( "##offset_x", &config->aimbot_.offset_x, 0, 15, "%dpx" );
+					ImGui::SliderInt( "##offset_x", &config->aimbot_.offset_x, -15, 15, "%dpx" );
 
 					ImGui::Text( "Offset (Y)" );
-					ImGui::SliderInt( "##offset_y", &config->aimbot_.offset_y, 0, 15, "%dpx" );
+					ImGui::SliderInt( "##offset_y", &config->aimbot_.offset_y, -15, 15, "%dpx" );
 
-					ImGui::Text( "Smooth" );
-					ImGui::SliderFloat( "##smooth", &config->aimbot_.smooth, 0.1f, 1.f, "%.1f" );
+					ImGui::Text( "Hold (% of head, 0 = off)" );
+					ImGui::SliderInt( "##hold_pct", &config->aimbot_.hold_pct, 0, 150, "%d%%" );
 
-					ImGui::Checkbox( "Lock (snap to head)", &config->aimbot_.lock );
-
-					ImGui::Text( "Lock gain (counts/px)" );
+					ImGui::Text( "Gain (counts/px)" );
 					ImGui::SliderFloat( "##lock_gain", &config->aimbot_.lock_gain, 0.1f, 5.f, "%.2f" );
 
-					ImGui::Text( "Lock settle" );
+					ImGui::Text( "Smooth (1 = snap)" );
+					ImGui::SliderFloat( "##smooth", &config->aimbot_.smooth, 0.1f, 1.f, "%.2f" );
+
+					ImGui::Text( "Settle" );
 					ImGui::SliderInt( "##lock_settle", &config->aimbot_.lock_settle_ms, 1, 30, "%dms" );
 
 					ImGui::EndTabItem( );
@@ -367,9 +368,6 @@ namespace Core::UI
 
 					if ( ImGui::BeginTabItem( "Settings" ) )
 				{
-					ImGui::Text( "Sensitivity" );
-					ImGui::SliderFloat( "##Sensitivity", &config->settings_.sensitivity, 0.1f, 5.f, "%.1f" );
-
 					ImGui::Text( "Target Color" );
 					const char* items[ ] = { "Magenta (Tritanopia)", "Yellow (Deuteranopia/Protanopia)", "Red (Default)" };
 					ImGui::Combo( "##colors", &config->settings_.color, items, IM_ARRAYSIZE( items ) );

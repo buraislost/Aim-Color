@@ -41,21 +41,27 @@ namespace Core
 
 			std::int32_t fov_x    = 60;
 			std::int32_t fov_y    = 50;
-			std::int32_t offset_x = 2;
-			std::int32_t offset_y = 3;
+			// extra px added to the aim point, which already sits at the centre of the head (0 = dead centre)
+			std::int32_t offset_x = 0;
+			std::int32_t offset_y = 0;
 
-			float smooth = 1.f;
+			// crosshair inside the head box (this % of the head size) -> hold still instead of chasing the colour. 0 = off
+			std::int32_t hold_pct = 60;
+
+			// 1 = close the whole gap per report (snap), lower = ease in
+			float smooth = 0.5f;
 
 			// true = aim runs without holding the bind
 			bool auto_aim = false;
 
-			// true = snap: the whole error goes out in one report every lock_settle_ms,
-			// no easing / clamp / curve. lock_gain = mouse counts per screen pixel of error.
+			// aim sends counts = error * lock_gain * smooth, one report every lock_settle_ms.
+			// lock_gain = mouse counts per screen pixel of error (depends on in-game sens).
+			// `lock` is kept only so configs exported by older builds still load, it is unused.
 			bool lock                  = false;
 			float lock_gain            = 1.f;
-			std::int32_t lock_settle_ms = 8;
+			std::int32_t lock_settle_ms = 10;
 
-			NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT( Aimbot, bind, fov_x, fov_y, offset_x, offset_y, smooth, auto_aim,
+			NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT( Aimbot, bind, fov_x, fov_y, offset_x, offset_y, hold_pct, smooth, auto_aim,
 			                                              lock, lock_gain, lock_settle_ms )
 		} aimbot_;
 

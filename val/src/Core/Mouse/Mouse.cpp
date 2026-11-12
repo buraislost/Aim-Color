@@ -96,7 +96,11 @@ namespace Core
 		port_name_ = port;
 
 		if ( backend_ == Backend::Makcu )
+		{
+			full_sweep_ = true;
 			open_port_locked( );
+			full_sweep_ = false;
+		}
 		else if ( backend_ == Backend::Medius )
 			open_medius_locked( );
 	}
@@ -353,7 +357,6 @@ namespace Core
 			return false;
 		}
 
-		dcb.BaudRate      = MAKCU_BAUD;
 		dcb.ByteSize      = 8;
 		dcb.Parity        = NOPARITY;
 		dcb.StopBits      = ONESTOPBIT;
@@ -371,50 +374,79 @@ namespace Core
 		timeouts.ReadTotalTimeoutConstant = 150;
 		timeouts.WriteTotalTimeoutConstant = 50;
 
-		if ( !SetCommState( handle, &dcb ) || !SetCommTimeouts( handle, &timeouts ) )
+		if ( !SetCommTimeouts( handle, &timeouts ) )
 		{
 			CloseHandle( handle );
-			status_ = "SetCommState/Timeouts failed";
+			status_ = "SetCommTimeouts failed";
 			return false;
 		}
 
-		PurgeComm( handle, PURGE_RXCLEAR | PURGE_TXCLEAR );
+		// stock firmware boots at 115200, but another tool can leave the device on a faster rate until
+		// it is replugged, so sweep a few rates before giving up. the rate that answers stays set.
+		constexpr DWORD bauds[] = { MAKCU_BAUD, 4000000, 2000000, 1000000, 921600, 460800 };
 
-		// handshake: a Makcu answers km.version() with "km.MAKCU\r\n>>> ".
-		// read in a loop (reply may arrive split) until "km." shows up or ~600ms pass.
+		// a Makcu answers km.version() with "km.MAKCU\r\n>>> ", so "km." or ">>>" marks a live command port
 		constexpr std::string_view probe = "km.version()\r\n";
 
-		DWORD written = 0;
+		std::string last_err = "no reply (not a Makcu cmd port)";
 
-		if ( !WriteFile( handle, probe.data( ), static_cast<DWORD>( probe.size( ) ), &written, nullptr ) ||
-		     written != probe.size( ) )
+		for ( const DWORD baud : bauds )
 		{
-			CloseHandle( handle );
-			status_ = "write failed";
-			return false;
+			// connect() retries every 3s on the UI thread: retries only try 115200 (fresh boot) and the
+			// last rate that answered (device left on 4M); only the explicit Apply sweeps every rate
+			if ( !full_sweep_ && baud != MAKCU_BAUD && baud != baud_ )
+				continue;
+
+			dcb.BaudRate = baud;
+
+			if ( !SetCommState( handle, &dcb ) )
+			{
+				last_err = "SetCommState failed @" + std::to_string( baud );
+				continue;
+			}
+
+			PurgeComm( handle, PURGE_RXCLEAR | PURGE_TXCLEAR );
+
+			// two tries per rate: the first write right after open / baud change can be dropped
+			for ( int tries = 0; tries < 2; ++tries )
+			{
+				DWORD written = 0;
+
+				if ( !WriteFile( handle, probe.data( ), static_cast<DWORD>( probe.size( ) ), &written, nullptr ) ||
+				     written != probe.size( ) )
+				{
+					last_err = "write failed @" + std::to_string( baud );
+					break;
+				}
+
+				std::string reply;
+
+				for ( int attempt = 0; attempt < 4 && reply.find( "km." ) == std::string::npos &&
+				                       reply.find( ">>>" ) == std::string::npos; ++attempt )
+				{
+					char  buf[ 128 ] = {};
+					DWORD got        = 0;
+
+					if ( ReadFile( handle, buf, sizeof( buf ) - 1, &got, nullptr ) && got > 0 )
+						reply.append( buf, got );
+				}
+
+				if ( reply.find( "km." ) != std::string::npos || reply.find( ">>>" ) != std::string::npos )
+				{
+					port_name_ = name; // remember the port that actually worked
+					baud_      = baud;
+					port_      = handle;
+					return true;
+				}
+
+				if ( !reply.empty( ) )
+					last_err = "unexpected reply @" + std::to_string( baud );
+			}
 		}
 
-		std::string reply;
-
-		for ( int attempt = 0; attempt < 4 && reply.find( "km." ) == std::string::npos; ++attempt )
-		{
-			char  buf[ 128 ] = {};
-			DWORD got        = 0;
-
-			if ( ReadFile( handle, buf, sizeof( buf ) - 1, &got, nullptr ) && got > 0 )
-				reply.append( buf, got );
-		}
-
-		if ( reply.find( "km." ) == std::string::npos )
-		{
-			CloseHandle( handle );
-			status_ = reply.empty( ) ? "no reply (not a Makcu cmd port)" : "unexpected reply";
-			return false;
-		}
-
-		port_name_ = name; // remember the port that actually worked
-		port_      = handle;
-		return true;
+		CloseHandle( handle );
+		status_ = last_err;
+		return false;
 	}
 
 	void Mouse::close_port_locked( ) const
