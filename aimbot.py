@@ -284,6 +284,7 @@ class aimbot:
             self._st_trigger.no_target_frames += 1
             if self._st_trigger.no_target_frames > 5:
                 self._has_prev = False
+            self._tb_armed = False
             self._st_trigger.decay_idle(0.4)
             return
 
