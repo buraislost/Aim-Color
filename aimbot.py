@@ -53,8 +53,10 @@ def apply_cfg(cfg: dict):
 
 COLOR_RANGES = {
     "yellow": {
-        "lower": np.array([24, 100, 150], dtype=np.uint8),
-        "upper": np.array([34, 255, 255], dtype=np.uint8),
+        "lower": np.array([22, 90, 150], dtype=np.uint8),
+        "upper": np.array([35, 255, 255], dtype=np.uint8),
+        "core_lower": np.array([25, 110, 235], dtype=np.uint8),
+        "core_upper": np.array([35, 255, 255], dtype=np.uint8),
     },
     "red": {
         "lower": np.array([0, 120, 120], dtype=np.uint8),
@@ -92,10 +94,18 @@ def _color_mask(hsv, tag: str, tol: int = 0):
         hi = np.clip(hi, 0, 255).astype(np.uint8)
         m = cv2.inRange(hsv, lo, hi)
         mask = m if mask is None else cv2.bitwise_or(mask, m)
+    if tag == "yellow" and "core_lower" in cr:
+        # Hysteresis: the real outline has a bright core (R,G ~255). Looser pixels
+        # (blur / AA edge) survive only next to a core pixel, so tan walls and wood
+        # (H~15-24, V<=200) with no core nearby never reach the target picker.
+        core = cv2.inRange(hsv, cr["core_lower"], cr["core_upper"])
+        near = cv2.dilate(core, _CORE_KERNEL)
+        mask = cv2.bitwise_or(core, cv2.bitwise_and(mask, near))
     return mask
 
 
 _KERNEL = np.ones((5, 5), np.uint8)
+_CORE_KERNEL = np.ones((7, 7), np.uint8)
 
 
 def _select_blob(mask, min_area: int = 8):
