@@ -128,7 +128,7 @@ def _select_blob(mask, min_area: int = 8):
     return ys[sel], xs[sel]
 
 
-def _render_png(roi, mask, target=None) -> bytes:
+def _render_png(roi, mask, target=None, ext=".png") -> bytes:
     """ROI | mask side by side, crosshair + target marker, as PNG bytes."""
     out = np.hstack([np.ascontiguousarray(roi), cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)])
     h = out.shape[0]
@@ -141,7 +141,8 @@ def _render_png(roi, mask, target=None) -> bytes:
         cv2.drawMarker(out, (ox + cx, cy), (255, 255, 255), cv2.MARKER_CROSS, 12, 1)
         if target:
             cv2.circle(out, (ox + int(target[0] * s), int(target[1] * s)), 6, (0, 255, 0), 1)
-    ok, buf = cv2.imencode(".png", out)
+    ok, buf = (cv2.imencode(ext, out, [cv2.IMWRITE_JPEG_QUALITY, 80]) if ext == ".jpg"
+               else cv2.imencode(ext, out))
     return buf.tobytes() if ok else b""
 
 
@@ -399,6 +400,43 @@ class aimbot:
         if roi is None:
             return None
         return _render_png(roi, mask, info.get("target"))
+
+    def debug_jpg(self, cfg: dict = None):
+        info, roi, mask = self.peek(cfg)
+        if roi is None:
+            return None
+        return _render_png(roi, mask, info.get("target"), ".jpg")
+
+    def debug_wide_jpg(self, cfg: dict = None, center=None):
+        """Wide look around the crosshair: FOV box, detected color pixels and the picked target."""
+        from Capture import grab_region, screen_size
+        cfg = cfg or self.cfg
+        sw, sh = screen_size()
+        vw = max(64, min(int(cfg.get("view_w", 720)), sw))
+        vh = max(64, min(int(cfg.get("view_h", 320)), sh))
+        cx, cy = center if center else (sw // 2, sh // 2)
+        x0 = max(0, min(sw - vw, cx - vw // 2))
+        y0 = max(0, min(sh - vh, cy - vh // 2))
+        img = grab_region(x0, y0, vw, vh)
+        px, py = cx - x0, cy - y0
+        hx, hy = int(cfg.get("fovx", 50)), int(cfg.get("fovy", 50))
+        rx0, rx1 = max(0, px - hx), min(vw, px + hx)
+        ry0, ry1 = max(0, py - hy), min(vh, py + hy)
+        roi = img[ry0:ry1, rx0:rx1]
+        if roi.size:
+            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            mask = _color_mask(hsv, cfg.get("color_to_track", "yellow"), int(cfg.get("tolerance", 0)))
+            roi[mask > 0] = (255, 0, 255)                      # detected pixels (in place on img)
+            ys, xs = _select_blob(mask, int(cfg.get("min_blob", 8)))
+            if len(xs):
+                tx, ty, _ = _pick_target(xs, ys, roi.shape[1] // 2, roi.shape[0] // 2, 0.0, 0.0, False)
+                ty += int(cfg.get("offset", 0))
+                cv2.circle(img, (rx0 + int(tx), ry0 + int(ty)), 7, (0, 255, 0), 1)
+        cv2.rectangle(img, (px - hx, py - hy), (px + hx, py + hy), (60, 255, 60), 1)
+        cv2.line(img, (px - 8, py), (px + 8, py), (255, 255, 255), 1)
+        cv2.line(img, (px, py - 8), (px, py + 8), (255, 255, 255), 1)
+        ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        return buf.tobytes() if ok else None
 
     def summary(self, window: float = 5.0) -> dict:
         """What the aim loop actually decided in the last `window` seconds."""
