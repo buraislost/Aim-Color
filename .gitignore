@@ -4,3 +4,5 @@ vcpkg_installed
 Claude outputs/
 UpgradeLog*.htm
 *.vcxproj.user
+__pycache__/
+*.pyc
