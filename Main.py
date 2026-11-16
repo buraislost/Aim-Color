@@ -126,6 +126,8 @@ class BuraApp:
         self.active_hist = collections.deque(maxlen=2000)
         self.last_err = ""
         self.last_err_t = 0.0
+        self._cap_err_streak = 0
+        self._cap_backend = "dxgi"
         self.port = self._get_free_port()
 
         self._setup_routes()
@@ -146,11 +148,20 @@ class BuraApp:
                        int(self.cfg.get("magnet_fov", 50))) * 2
 
             if self.capture is None:
-                try:
-                    self.capture = DXGICapture(fov=need)
-                except Exception:
+                pref = self.cfg.get("capture_backend", "auto")
+                if pref == "gdi":
                     self.capture = DirectXCapture(fov=need)
+                    self._cap_backend = "gdi"
+                else:
+                    try:
+                        self.capture = DXGICapture(fov=need)
+                        self._cap_backend = "dxgi"
+                    except Exception as e:
+                        self._note_err(e)
+                        self.capture = DirectXCapture(fov=need)
+                        self._cap_backend = "gdi"
                 self.cap_fov = need
+                self._cap_err_streak = 0
             elif need > self.cap_fov:
                 # FOV was raised from the GUI after startup — grow the grab region
                 try:
@@ -233,7 +244,9 @@ class BuraApp:
                 c = getattr(self.capture, "center", None)
                 d["capture"] = {"center": list(c) if c else None,
                                 "src": getattr(self.capture, "center_src", "screen"),
-                                "win": str(self.cfg.get("capture_window", "VALORANT"))}
+                                "win": str(self.cfg.get("capture_window", "VALORANT")),
+                                "backend": self._cap_backend,
+                                "err_streak": self._cap_err_streak}
             except Exception as e:
                 d["detect"] = {"err": f"{type(e).__name__}: {e}"}
             return jsonify(d)
@@ -332,6 +345,22 @@ class BuraApp:
         def api_soft_test():
             return jsonify(ok=self.mouse.test_soft())
 
+        @self.app.route("/api/capture/backend", methods=["POST"])
+        def api_cap_backend():
+            b = request.get_json(silent=True) or {}
+            bk = b.get("backend", "auto")
+            if bk not in ("auto", "dxgi", "gdi"):
+                return jsonify(ok=False, err="bad backend")
+            self.cfg["capture_backend"] = bk
+            try:
+                if self.capture: self.capture.close()
+            except Exception: pass
+            self.capture = None
+            self.aim = None
+            self._cap_err_streak = 0
+            apply_cfg(self.cfg)
+            return jsonify(ok=True, backend=bk)
+
         @self.app.route("/api/bind", methods=["POST"])
         def api_bind():
             b = request.get_json(silent=True) or {}
@@ -405,7 +434,21 @@ class BuraApp:
             except Exception as e:
                 self._note_err(e)
                 logging.debug(f"aim loop error: {e}")
+                # DXGI/bettercam crash — swap to GDI after 5 consecutive errors
+                if self._cap_backend == "dxgi":
+                    self._cap_err_streak += 1
+                    if self._cap_err_streak >= 5:
+                        try:
+                            if self.capture: self.capture.close()
+                        except Exception: pass
+                        self.capture = None
+                        self.aim = None
+                        self.cfg["capture_backend"] = "gdi"
+                        self._cap_err_streak = 0
+                        self.last_err = "DXGI unstable — switched to GDI"
                 time.sleep(0.05)  # don't spin on a persistent failure
+            else:
+                self._cap_err_streak = 0
 
             n += 1
             now = time.perf_counter()

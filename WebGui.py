@@ -278,7 +278,7 @@ _JS = r"""
       set('d_off',t.dx!=null?t.dx+', '+t.dy:null);
       set('d_frame',t.frame?t.frame.join('x')+' (screen '+d.screen.join('x')+')':null);
       var cp=d.capture||{};
-      set('d_cap',cp.center?cp.center.join(', ')+' ('+cp.src+(cp.src==='screen'?': window "'+cp.win+'" not found':'')+')':null);
+      set('d_cap',cp.center?cp.center.join(', ')+' ('+cp.src+(cp.src==='screen'?': window "'+cp.win+'" not found':'')+') ['+(cp.backend||'?')+(cp.err_streak?' err='+cp.err_streak:'')+']':null);
       set('d_mean',t.mean);
       set('d_active',l.active?'ON':'OFF');
       set('d_key',(l.hotkey_down?'down':'up')+' / '+d.aim_mode);
@@ -340,6 +340,13 @@ _JS = r"""
       out(r.ok?'Sent a 25px square through SendInput. The cursor should have moved.':'SendInput failed.');
     }).catch(function(e){out('Request failed: '+e)});
   };
+  function _swCap(bk){
+    post('/api/capture/backend',{backend:bk}).then(function(r){
+      out(r.ok?('Capture backend switched to '+r.backend+'. If aim was running, it will reinit on the next frame.'):'Switch failed: '+r.err);
+    }).catch(function(e){out('Request failed: '+e)});
+  }
+  if($('b_cap_dxgi').onclick!==undefined){$('b_cap_dxgi').onclick=function(){_swCap('dxgi')};}
+  if($('b_cap_gdi').onclick!==undefined){$('b_cap_gdi').onclick=function(){_swCap('gdi')};}
   document.querySelectorAll('.kb').forEach(function(b){
     b.onclick=function(){
       var old=b.textContent;b.textContent='Press a key... (Esc cancels)';b.disabled=true;
@@ -590,6 +597,8 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
                '<button type="button" class="btn2" id="b_probe">Probe baud</button>'
                '<button type="button" class="btn2" id="b_test">Test Makcu</button>'
                '<button type="button" class="btn2" id="b_soft">Test SendInput</button>'
+               '<button type="button" class="btn2" id="b_cap_dxgi">DXGI</button>'
+               '<button type="button" class="btn2" id="b_cap_gdi">GDI</button>'
                '</div>'
                '<pre class="out" id="d_out">Output shows here.</pre>')
     )
