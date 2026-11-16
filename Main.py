@@ -450,6 +450,24 @@ class BuraApp:
             return down
         return self._toggled
 
+    def _makcu_watch(self):
+        """Makcu not connected (port busy / unplugged): retry every 3 s instead of staying in
+        SendInput, which Vanguard drops inside the game. Runs only while the aim key is up."""
+        m = self.mouse
+        mk = getattr(m, "makcu", None)
+        if getattr(m, "mode", "") != "makcu" or mk is None or mk.found:
+            self._mk_retry = 0.0
+            return
+        now = time.perf_counter()
+        if now < getattr(self, "_mk_retry", 0.0) or self._aim_active():
+            return
+        self._mk_retry = now + 3.0
+        try:
+            if m.reconnect():
+                logging.info("Makcu reconnected on %s", m.makcu.port_name)
+        except Exception as e:
+            logging.debug(f"makcu retry failed: {e}")
+
     def _heartbeat_loop(self):
         """Main aim loop — runs in a thread."""
         n, t0 = 0, time.perf_counter()
@@ -462,6 +480,7 @@ class BuraApp:
                         self._drop_capture(why + " - switched to GDI", force_gdi=True)
                         continue
 
+                self._makcu_watch()
                 self.active = self._aim_active()
                 self.active_hist.append(self.active)
                 if self.active:
@@ -545,6 +564,28 @@ class BuraApp:
         self.app.run(host="127.0.0.1", port=self.port, debug=False, use_reloader=False)
 
 
+def _single_instance() -> bool:
+    """False when another Bura is already running. A second copy cannot open the Makcu COM
+    port, silently falls back to SendInput and then 'does nothing' in game."""
+    try:
+        import ctypes
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.CreateMutexW.restype = ctypes.c_void_p
+        k.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
+        h = k.CreateMutexW(None, 1, "Local\\BuraSingleInstance")
+        if ctypes.get_last_error() == 183:          # ERROR_ALREADY_EXISTS
+            return False
+        _single_instance.h = h                      # keep the handle alive for the whole run
+    except Exception:
+        pass
+    return True
+
+
 if __name__ == "__main__":
+    if not _single_instance():
+        print("Bura is already running. Close the other Bura.exe (Task Manager) first: "
+              "two copies fight over the Makcu COM port and the second one falls back to SendInput.")
+        time.sleep(8)
+        raise SystemExit(1)
     app = BuraApp()
     app.run()
