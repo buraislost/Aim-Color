@@ -161,6 +161,42 @@ def _roi_mask(frame, cfg: dict):
     return roi, mask
 
 
+def wide_scan(img, px: int, py: int, hx: int, hy: int, cfg: dict) -> dict:
+    """Color pixels over the whole wide view, split into inside / outside the FOV box.
+    Tells the user *why* nothing is tracked: no color at all, or color outside the FOV."""
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    mask = _color_mask(hsv, cfg.get("color_to_track", "yellow"), int(cfg.get("tolerance", 0)))
+    h, w = mask.shape
+    box = np.zeros(mask.shape, dtype=bool)
+    box[max(0, py - hy):min(h, py + hy), max(0, px - hx):min(w, px + hx)] = True
+    res = {"in": int(np.count_nonzero(mask[box])), "out": 0,
+           "dx": None, "dy": None, "need": None, "t": time.time()}
+    out = mask.copy()
+    out[box] = 0
+    ys, xs = np.nonzero(out)
+    res["out"] = int(len(xs))
+    if len(xs) == 0:
+        return res
+    n, labels, _, cents = cv2.connectedComponentsWithStats(cv2.dilate(out, _KERNEL), connectivity=8)
+    cnt = np.bincount(labels[ys, xs], minlength=n)
+    cnt[0] = 0
+    floor = max(int(cfg.get("min_blob", 8)), int(cnt.max() * 0.25))
+    best, best_d = -1, 1e18
+    for k in range(1, n):
+        if cnt[k] < floor:
+            continue
+        d = (cents[k][0] - px) ** 2 + (cents[k][1] - py) ** 2
+        if d < best_d:
+            best, best_d = k, d
+    if best >= 0:
+        sel = labels[ys, xs] == best
+        bx, by = xs[sel], ys[sel]
+        res["dx"] = int(round(bx.mean() - px))
+        res["dy"] = int(round(by.mean() - py))
+        res["need"] = int(max(np.abs(bx - px).max(), np.abs(by - py).max()) + 6)
+    return res
+
+
 # ---------- capture wrapper ----------
 
 class _CaptureWrapper:
@@ -358,6 +394,7 @@ class aimbot:
         self.dbg = {}
         self.log = collections.deque(maxlen=800)   # (t, why, px, dx, dy, mx, my)
         self.hit = None                            # last frame that had the color
+        self.wide_info = None                      # color scan of the wide debug view
         self._hit_t = 0.0
 
     # ---------- debug (never moves the mouse) ----------
@@ -419,6 +456,10 @@ class aimbot:
         hx, hy = int(cfg.get("fovx", 50)), int(cfg.get("fovy", 50))
         rx0, rx1 = max(0, px - hx), min(vw, px + hx)
         ry0, ry1 = max(0, py - hy), min(vh, py + hy)
+        try:
+            self.wide_info = wide_scan(img, px, py, hx, hy, cfg)
+        except Exception as e:
+            self.wide_info = {"err": f"{type(e).__name__}: {e}", "t": time.time()}
         roi = img[ry0:ry1, rx0:rx1]
         if roi.size:
             hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)

@@ -128,6 +128,7 @@ class BuraApp:
         self.last_err_t = 0.0
         self._cap_err_streak = 0
         self._cap_backend = "dxgi"
+        self._force_gdi = False          # set at runtime when DXGI proves unusable (not saved)
         self.port = self._get_free_port()
 
         self._setup_routes()
@@ -141,6 +142,23 @@ class BuraApp:
         self.last_err = f"{type(e).__name__}: {e}"
         self.last_err_t = time.time()
 
+    def _drop_capture(self, reason: str = "", force_gdi: bool = False):
+        """Close the grabber and let _ensure_camera build a fresh one (optionally GDI only)."""
+        with self._cam_lock:
+            try:
+                if self.capture:
+                    self.capture.close()
+            except Exception:
+                pass
+            self.capture = None
+            self.aim = None
+            self._cap_err_streak = 0
+            if force_gdi:
+                self._force_gdi = True
+            if reason:
+                self.last_err = reason
+                self.last_err_t = time.time()
+
     def _ensure_camera(self):
         with self._cam_lock:
             need = max(int(self.cfg.get("fovx", 50)),
@@ -149,7 +167,7 @@ class BuraApp:
 
             if self.capture is None:
                 pref = self.cfg.get("capture_backend", "auto")
-                if pref == "gdi":
+                if pref == "gdi" or self._force_gdi:
                     self.capture = DirectXCapture(fov=need)
                     self._cap_backend = "gdi"
                 else:
@@ -245,8 +263,9 @@ class BuraApp:
                 d["capture"] = {"center": list(c) if c else None,
                                 "src": getattr(self.capture, "center_src", "screen"),
                                 "win": str(self.cfg.get("capture_window", "VALORANT")),
-                                "backend": self._cap_backend,
+                                "backend": self._cap_backend + (" (forced)" if self._force_gdi else ""),
                                 "err_streak": self._cap_err_streak}
+                d["wide"] = getattr(self.aim, "wide_info", None)
             except Exception as e:
                 d["detect"] = {"err": f"{type(e).__name__}: {e}"}
             return jsonify(d)
@@ -352,12 +371,8 @@ class BuraApp:
             if bk not in ("auto", "dxgi", "gdi"):
                 return jsonify(ok=False, err="bad backend")
             self.cfg["capture_backend"] = bk
-            try:
-                if self.capture: self.capture.close()
-            except Exception: pass
-            self.capture = None
-            self.aim = None
-            self._cap_err_streak = 0
+            self._drop_capture("", force_gdi=False)
+            self._force_gdi = False
             apply_cfg(self.cfg)
             return jsonify(ok=True, backend=bk)
 
@@ -418,6 +433,11 @@ class BuraApp:
         while self.running:
             try:
                 self._ensure_camera()
+                if self._cap_backend == "dxgi" and hasattr(self.capture, "health"):
+                    why = self.capture.health()
+                    if why:                      # no frames / black frames: GDI works where DXGI does not
+                        self._drop_capture(why + " - switched to GDI", force_gdi=True)
+                        continue
 
                 self.active = self._aim_active()
                 self.active_hist.append(self.active)
@@ -434,18 +454,12 @@ class BuraApp:
             except Exception as e:
                 self._note_err(e)
                 logging.debug(f"aim loop error: {e}")
-                # DXGI/bettercam crash — swap to GDI after 5 consecutive errors
+                # DXGI raising over and over -> GDI for the rest of this run
                 if self._cap_backend == "dxgi":
                     self._cap_err_streak += 1
                     if self._cap_err_streak >= 5:
-                        try:
-                            if self.capture: self.capture.close()
-                        except Exception: pass
-                        self.capture = None
-                        self.aim = None
-                        self.cfg["capture_backend"] = "gdi"
-                        self._cap_err_streak = 0
-                        self.last_err = "DXGI unstable — switched to GDI"
+                        self._drop_capture(f"DXGI failing ({type(e).__name__}) - switched to GDI",
+                                           force_gdi=True)
                 time.sleep(0.05)  # don't spin on a persistent failure
             else:
                 self._cap_err_streak = 0

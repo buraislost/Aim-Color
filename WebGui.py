@@ -257,16 +257,19 @@ _JS = r"""
   }
   function diag(d){
     var t=d.detect||{},l=d.loop||{},i=d.input||{},tr=d.trace,mix=(tr&&tr.reasons)||{},m,c='ok';
+    var w=d.wide;if(w&&(w.err||!w.t||(Date.now()/1000-w.t)>3))w=null;
     var mv=mix.move||0,np=mix.no_pixels||0,dz=(mix['deadzone']||0)+(mix['deadzone(locked)']||0),sp=mix.subpixel||0;
     if(l.err){m='Loop error: '+l.err;c='bad'}
     else if(t.err){m='Capture error: '+t.err;c='bad'}
-    else if(t.mean!=null&&t.mean<1){m='Capture is black: the game is not being grabbed (check display mode / monitor)';c='bad'}
+    else if(t.mean!=null&&t.mean<1){m='Capture is black ('+((d.capture&&d.capture.backend)||'?')+'): the game is not being grabbed. Try the other backend (DXGI / GDI buttons) or check display mode / monitor.';c='bad'}
     else if(!tr||!tr.calls){m='Aim is not sampling: mode "'+d.aim_mode+'" needs its key (see Keys tab), or capture has not started.';c='bad'}
     else if(mv>0&&i.mode==='makcu'&&!i.makcu_found){m='Makcu not found: moves are going through SendInput fallback.';c='ok'}
     else if(mv>0){m='OK: aim sent '+tr.sent[0]+' / '+tr.sent[1]+' px in 5 s ('+mv+' move samples).';c='ok'}
     else if(dz>=np&&dz>=sp&&dz>0){m='Target is inside the dead zone: lower Dead X / Dead Y.';c='bad'}
     else if(sp>np){m='Moves round down to 0: Speed is too high (smaller = faster).';c='bad'}
-    else{m='No color blob in the FOV box during the last 5 s. This preview shows what is under the crosshair NOW (including this window). See "last frame with color" below.';c='bad'}
+    else if(w&&w['in']===0&&w.out>0&&w.need){m='Color is in view ('+w.dx+', '+w.dy+' px from the crosshair) but outside the FOV box: raise FOV X / Y to '+w.need+' or more.';c='bad'}
+    else if(w&&w['in']===0&&w.out===0){m='No pixel of "'+d.color+'" in the whole wide view: no bot on screen, or the game highlight color differs from "'+d.color+'" (set Enemy Highlight to match).';c='bad'}
+    else{m='Color is inside the FOV box but no blob was picked (too small, min_blob). See "last frame with color" below.';c='bad'}
     $('d_diag').textContent=m;$('d_diag').className='diag '+c;
   }
   function poll(){
@@ -280,6 +283,8 @@ _JS = r"""
       var cp=d.capture||{};
       set('d_cap',cp.center?cp.center.join(', ')+' ('+cp.src+(cp.src==='screen'?': window "'+cp.win+'" not found':'')+') ['+(cp.backend||'?')+(cp.err_streak?' err='+cp.err_streak:'')+']':null);
       set('d_mean',t.mean);
+      var wd=d.wide,fresh=wd&&!wd.err&&wd.t&&(Date.now()/1000-wd.t)<3;
+      set('d_wide',fresh?(wd['in']+' px in FOV, '+wd.out+' px outside'+(wd.need?' (nearest '+wd.dx+', '+wd.dy+')':'')):(wd&&wd.err)||null);
       set('d_active',l.active?'ON':'OFF');
       set('d_key',(l.hotkey_down?'down':'up')+' / '+d.aim_mode);
       set('d_hz',l.hz?l.hz+' Hz':null);
@@ -582,7 +587,7 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
         '<div class="grps">'
         + _grp("Detection", _kv(("Color", "d_color"),
                                 ("Frame", "d_frame"), ("Capture center", "d_cap"),
-                                ("Brightness", "d_mean"), ("Foreground", "d_fg")), True)
+                                ("Brightness", "d_mean"), ("Color scan", "d_wide"), ("Foreground", "d_fg")), True)
         + _grp("Aim loop", _kv(("Key / mode", "d_key"), ("Input", "d_in"), ("Moves sent", "d_moves"),
                                ("Last move", "d_last"), ("Samples / s", "d_rate"),
                                ("Result mix (5 s)", "d_mix"), ("Last sample", "d_lastS"),

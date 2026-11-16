@@ -72,50 +72,24 @@ def get_center():
 
 class DirectXCapture:
     """
-    GDI-based screen capture with triple buffering.
-    Captures a region of the screen centered on the crosshair.
+    GDI capture of the FOV box around the crosshair (the game window center).
+    Shares the cached-DC grabber below, which declares ctypes argtypes: the old
+    inline version passed a 64-bit buffer pointer as a plain int
+    ("ArgumentError: argument 5: OverflowError: int too long to convert").
     """
 
-    __slots__ = (
-        "_hdc_src",
-        "_buffers",
-        "_cur",
-        "_screen_w",
-        "_screen_h",
-        "_fov",
-        "_region",
-        "_blit_flags",
-        "center",
-        "center_src",
-        "_c_t",
-    )
+    __slots__ = ("_screen_w", "_screen_h", "_fov", "_region",
+                 "center", "center_src", "_c_t")
 
-    def __init__(self, fov=100, output_color="BGR", include_layered=True, triple_buffer=True):
-        user32 = windll.user32
-        gdi32 = windll.gdi32
-
-        self._screen_w = user32.GetSystemMetrics(0)
-        self._screen_h = user32.GetSystemMetrics(1)
-        self._fov = fov
-        self._cur = 0
-        self._blit_flags = 0x00CC0020 | (0x40000000 if include_layered else 0)  # SRCCOPY | CAPTUREBLT
-
+    def __init__(self, fov=100, **_ignored):
+        u = windll.user32
+        self._screen_w = u.GetSystemMetrics(0)
+        self._screen_h = u.GetSystemMetrics(1)
+        self._fov = int(fov)
         self.center = (self._screen_w // 2, self._screen_h // 2)
         self.center_src = "screen"
         self._c_t = 0.0
         self._update_region()
-
-        # Get screen DC
-        self._hdc_src = user32.GetDC(0)
-
-        # Create compatible DCs and bitmaps for triple buffering
-        num_buffers = 3 if triple_buffer else 1
-        self._buffers = []
-        for _ in range(num_buffers):
-            hdc = gdi32.CreateCompatibleDC(self._hdc_src)
-            hbm = gdi32.CreateCompatibleBitmap(self._hdc_src, self._fov, self._fov)
-            gdi32.SelectObject(hdc, hbm)
-            self._buffers.append((hdc, hbm))
 
     def _update_region(self):
         half = self._fov // 2
@@ -126,59 +100,26 @@ class DirectXCapture:
         self._region = (x, y, self._fov, self._fov)
 
     def set_fov(self, fov: int):
-        self._fov = fov
+        self._fov = int(fov)
         self._update_region()
 
     def capture_screen(self) -> np.ndarray:
-        """Capture the FOV region around screen center. Returns BGR numpy array."""
-        gdi32 = windll.gdi32
-
+        """FOV box around the crosshair as a BGR copy."""
         now = _time.perf_counter()
         if now - self._c_t > 0.5:      # window may move / resize
             self._c_t = now
             self._update_region()
-
-        idx = self._cur % len(self._buffers)
-        self._cur += 1
-        hdc_dst, hbm = self._buffers[idx]
-
         x, y, w, h = self._region
-
-        # BitBlt from screen
-        gdi32.BitBlt(hdc_dst, 0, 0, w, h, self._hdc_src, x, y, self._blit_flags)
-
-        # Extract pixels via GetBitmapBits
-        bmi = ctypes.create_string_buffer(40)
-        ctypes.memmove(bmi, b'\x28\x00\x00\x00', 4)  # biSize
-        ctypes.memmove(ctypes.addressof(ctypes.c_char.from_buffer(bmi, 4)),
-                       w.to_bytes(4, 'little'), 4)
-        ctypes.memmove(ctypes.addressof(ctypes.c_char.from_buffer(bmi, 8)),
-                       (-(h)).to_bytes(4, 'little', signed=True), 4)
-        ctypes.memmove(ctypes.addressof(ctypes.c_char.from_buffer(bmi, 12)),
-                       b'\x01\x00', 2)  # biPlanes
-        ctypes.memmove(ctypes.addressof(ctypes.c_char.from_buffer(bmi, 14)),
-                       b'\x20\x00', 2)  # biBitCount = 32
-
-        buf = np.empty((h, w, 4), dtype=np.uint8)
-        gdi32.GetDIBits(hdc_dst, hbm, 0, h, buf.ctypes.data, bmi, 0)
-
-        return buf[:, :, :3]  # Drop alpha, return BGR
+        return grab_region(x, y, w, h)
 
     def recreate(self):
-        """Recreate capture resources (e.g. after resolution change)."""
-        self.close()
-        self.__init__(fov=self._fov)
+        """Resolution / FOV change: recompute the region."""
+        self._screen_w = windll.user32.GetSystemMetrics(0)
+        self._screen_h = windll.user32.GetSystemMetrics(1)
+        self._update_region()
 
     def close(self):
-        gdi32 = windll.gdi32
-        user32 = windll.user32
-        for hdc, hbm in self._buffers:
-            gdi32.DeleteDC(hdc)
-            gdi32.DeleteObject(hbm)
-        self._buffers.clear()
-        if self._hdc_src:
-            user32.ReleaseDC(0, self._hdc_src)
-            self._hdc_src = None
+        pass
 
     def __enter__(self):
         return self
@@ -188,17 +129,36 @@ class DirectXCapture:
 
 
 class DXGICapture:
-    """Wrapper using bettercam for DXGI desktop duplication capture."""
+    """
+    bettercam DXGI desktop duplication, polled synchronously from the aim thread.
+
+    bettercam's own capture thread is NOT used: on "access lost" (display mode change,
+    game focus, UAC, hybrid-GPU laptops) the library rebuilds its frame buffer at full
+    screen size while the thread keeps grabbing the small FOV box ->
+    "could not broadcast (100,100,3) into (1080,1920,3)", the thread dies, and
+    get_latest_frame() then serves uninitialised (black) memory or blocks forever.
+    grab() is non-blocking (AcquireNextFrame timeout 0) and None means "no new frame".
+    """
 
     def __init__(self, fov=100):
         import bettercam
-        self._fov = fov
+        self._fov = int(fov)
         self.center = (0, 0)
         self.center_src = "screen"
         self._c_t = 0.0
+        self._t_born = _time.perf_counter()
+        self._last = None
+        self._black_t = None
         self._cam = bettercam.create(output_color="BGR")
         self._region = self._get_region()
-        self._cam.start(region=self._region, video_mode=True, target_fps=240)
+        # the first AcquireNextFrame often times out: poll briefly for a real frame
+        t0 = _time.perf_counter()
+        while self._last is None and _time.perf_counter() - t0 < 0.5:
+            if self._pull() is None:
+                _time.sleep(0.01)
+        if self._last is not None and self._last.max() == 0:
+            self.close()
+            raise RuntimeError("DXGI frames are black (game on another GPU / output?)")
 
     def _get_region(self):
         user32 = windll.user32
@@ -211,29 +171,50 @@ class DXGICapture:
         t = max(0, min(sh - self._fov, cy - half))
         return (l, t, l + self._fov, t + self._fov)
 
-    def _restart(self):
-        self._cam.stop()
-        self._region = self._get_region()
-        self._cam.start(region=self._region, video_mode=True, target_fps=240)
+    def _pull(self):
+        f = self._cam.grab(self._region)       # None = nothing new on screen yet
+        if f is not None:
+            self._last = f
+            if f.max() == 0:
+                if self._black_t is None:
+                    self._black_t = _time.perf_counter()
+            else:
+                self._black_t = None
+        return f
 
     def set_fov(self, fov: int):
-        self._fov = fov
-        self._restart()
+        self._fov = int(fov)
+        self._c_t = 0.0                        # recompute the region on the next capture
 
     def capture_screen(self) -> np.ndarray:
         now = _time.perf_counter()
-        if now - self._c_t > 0.5:      # window may move / resize
+        if now - self._c_t > 0.5:              # window may move / resize / FOV changed
             self._c_t = now
             r = self._get_region()
             if r != self._region:
-                self._restart()
-        frame = self._cam.get_latest_frame()
-        if frame is None:
+                self._region = r
+                if self._last is not None and self._last.shape[:2] != (r[3] - r[1], r[2] - r[0]):
+                    self._last = None
+        self._pull()
+        if self._last is None:
             return np.zeros((self._fov, self._fov, 3), dtype=np.uint8)
-        return frame
+        return self._last
+
+    def health(self) -> str:
+        """'' while frames look real, otherwise why Main should fall back to GDI."""
+        now = _time.perf_counter()
+        if self._last is None:
+            return "DXGI gave no frames" if now - self._t_born > 3.0 else ""
+        if self._black_t is not None and now - self._black_t > 3.0:
+            return "DXGI frames are black"
+        return ""
 
     def close(self):
-        self._cam.stop()
+        cam, self._cam = self._cam, None
+        if cam is not None:
+            del cam                            # __del__ releases the COM objects once
+            import gc
+            gc.collect()
 
     def __enter__(self):
         return self
