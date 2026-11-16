@@ -38,7 +38,6 @@ _DEFAULT_CFG = {
     "deadzone_y": 3,
     "pixel_distance": 5,
     "base_delay": 0.05,
-    "FOV_TRIGGER": 30,
     "magnet_strength": 0.5,
     "magnet_smooth": 3.0,
     "magnet_fov": 50,
@@ -63,14 +62,24 @@ magnet_option = ["v1", "v2"]
 
 # ---------- should_fire helpers ----------
 
+_toggle_active = False
+_toggle_prev_key = False
+
+
 def _should_fire(cfg: dict) -> bool:
+    global _toggle_active, _toggle_prev_key
     mode = cfg.get("aim_mode", "hold")
     hotkey = int(cfg.get("trigger_hotkey", 0x14))
     if mode == "always":
         return True
     if mode == "hold":
         return get_async_key_state(hotkey)
-    # toggle handled in app state
+    if mode == "toggle":
+        pressed = get_async_key_state(hotkey)
+        if pressed and not _toggle_prev_key:
+            _toggle_active = not _toggle_active
+        _toggle_prev_key = pressed
+        return _toggle_active
     return False
 
 
@@ -105,6 +114,7 @@ class BuraApp:
             print("[Bura] WARNING: MAKCU not found — mouse moves will do nothing")
         self.capture = None
         self.aim = None
+        self._capture_fov = 0  # track current capture FOV to detect changes
         self.running = True
         self.port = self._get_free_port()
 
@@ -116,12 +126,24 @@ class BuraApp:
             return s.getsockname()[1]
 
     def _ensure_camera(self):
+        fov = max(
+            int(self.cfg.get("fovx", 50)),
+            int(self.cfg.get("fovy", 50)),
+            int(self.cfg.get("magnet_fov", 50)),
+        ) * 2
+
+        # Recreate capture if FOV changed
+        if self.capture is not None and fov != self._capture_fov:
+            print(f"[Bura] FOV changed {self._capture_fov} -> {fov}, recreating capture")
+            try:
+                self.capture.close()
+            except Exception:
+                pass
+            self.capture = None
+            self.aim = None
+
         if self.capture is None:
-            fov = max(
-                int(self.cfg.get("fovx", 50)),
-                int(self.cfg.get("fovy", 50)),
-                int(self.cfg.get("magnet_fov", 50)),
-            ) * 2
+            self._capture_fov = fov
             try:
                 self.capture = DXGICapture(fov=fov)
                 print(f"[Bura] capture: DXGI (bettercam), fov={fov}")

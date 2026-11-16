@@ -33,12 +33,13 @@ jobs:
           name: Bura-exe
           path: dist/Bura.exe
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/bura-python'
-        with:
-          tag_name: bura-v${{ github.run_number }}
-          name: Bura Build ${{ github.run_number }}
-          files: dist/Bura.exe
-          draft: false
-          prerelease: false
+      # Release disabled — download from Actions artifacts until bugs verified
+      # - name: Create Release
+      #   uses: softprops/action-gh-release@v2
+      #   if: github.ref == 'refs/heads/bura-python'
+      #   with:
+      #     tag_name: bura-v${{ github.run_number }}
+      #     name: Bura Build ${{ github.run_number }}
+      #     files: dist/Bura.exe
+      #     draft: false
+      #     prerelease: false

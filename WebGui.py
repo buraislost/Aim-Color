@@ -16,6 +16,16 @@ def _show_login_form() -> str:
     """
 
 
+_VK_NAMES = {
+    0x01: "LMB", 0x02: "RMB", 0x04: "MMB", 0x05: "X1", 0x06: "X2",
+    0x10: "Shift", 0x11: "Ctrl", 0x12: "Alt", 0x14: "CapsLock",
+    0x20: "Space", 0x09: "Tab", 0x1B: "Esc",
+    0x70: "F1", 0x71: "F2", 0x72: "F3", 0x73: "F4", 0x74: "F5",
+    0x75: "F6", 0x76: "F7", 0x77: "F8", 0x78: "F9", 0x79: "F10",
+    0x7A: "F11", 0x7B: "F12",
+}
+
+
 def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list) -> str:
     """Generate the main config page HTML with compact tabbed layout."""
 
@@ -35,7 +45,13 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list) -> s
         return f'<div class="s"><span class="l">{label}</span><label class="sw"><input type="checkbox" name="{name}" {chk}><span class="dot"></span></label></div>'
 
     # --- Tab: Aimbot ---
+    aim_hk = int(cfg.get("trigger_hotkey", 0x14))
+    aim_hk_name = _VK_NAMES.get(aim_hk, f"0x{aim_hk:02X}")
+    mag_hk = int(cfg.get("magnet_key", 0x02))
+    mag_hk_name = _VK_NAMES.get(mag_hk, f"0x{mag_hk:02X}")
+
     tab_aim = "".join([
+        f'<div class="s"><span class="l">Hotkey</span><span class="v" style="flex:1;text-align:left;color:#7c5cfc">{aim_hk_name}</span></div>',
         _sel("color_to_track", "Color", colors, cfg.get("color_to_track", "yellow")),
         _sel("aim_mode", "Mode", aim_modes, cfg.get("aim_mode", "hold")),
         _s("fovx", "FOV X", cfg.get("fovx", 50), 10, 500),
@@ -63,6 +79,7 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list) -> s
 
     # --- Tab: Magnet ---
     tab_magnet = "".join([
+        f'<div class="s"><span class="l">Hotkey</span><span class="v" style="flex:1;text-align:left;color:#7c5cfc">{mag_hk_name}</span></div>',
         _sel("magnet_version", "Mode", magnet_option, cfg.get("magnet_version", "v1")),
         _s("magnet_strength", "Strength", cfg.get("magnet_strength", 0.5), 0.1, 2.0, 0.1),
         _s("magnet_smooth", "Smooth", cfg.get("magnet_smooth", 3), 1, 10),

@@ -117,7 +117,8 @@ class _SmoothState:
 def _smooth_move(st: _SmoothState, dx: float, dy: float,
                  spd_x: float, spd_y: float,
                  dz_x: int, dz_y: int,
-                 smooth: float = 0.4) -> tuple:
+                 smooth: float = 0.4,
+                 humanize: bool = True) -> tuple:
     """
     Smoothing pipeline:
     1. Deadzone hysteresis — inner/outer threshold prevents boundary chatter
@@ -169,11 +170,12 @@ def _smooth_move(st: _SmoothState, dx: float, dy: float,
 
     # ---- gaussian micro-noise (human hand tremor) ----
     # scaled to velocity magnitude — still when near target, slight when moving
-    vmag = math.hypot(st.vx, st.vy)
-    if vmag > 0.5:
-        noise_scale = min(vmag * 0.06, 0.8)
-        st.vx += random.gauss(0, noise_scale)
-        st.vy += random.gauss(0, noise_scale)
+    if humanize:
+        vmag = math.hypot(st.vx, st.vy)
+        if vmag > 0.5:
+            noise_scale = min(vmag * 0.06, 0.8)
+            st.vx += random.gauss(0, noise_scale)
+            st.vy += random.gauss(0, noise_scale)
 
     # ---- sub-pixel accumulation ----
     st.rx += st.vx
@@ -304,7 +306,8 @@ class aimbot:
         if self.cfg.get("legitmode", False):
             sm = 0.22
 
-        mx, my = _smooth_move(self._st_trigger, raw_dx, raw_dy, sx, sy, dzx, dzy, smooth=sm)
+        hum = bool(self.cfg.get("humanize", True))
+        mx, my = _smooth_move(self._st_trigger, raw_dx, raw_dy, sx, sy, dzx, dzy, smooth=sm, humanize=hum)
 
         if self.cfg.get("anti_strafe", False):
             mx = int(mx * 0.65)
@@ -367,11 +370,7 @@ class aimbot:
         if cfg:
             self.cfg = cfg
 
-        key = int(self.cfg.get("magnet_key", 0x02))
-        rs = ctypes.windll.user32.GetAsyncKeyState(key)
-        if not (rs & 0x8000):
-            self._st_magnet.decay_idle(0.3)
-            return
+        # Key check already done by _magnet_should_fire() in Main.py
 
         frame = self.capture.read()
         if frame is None:
