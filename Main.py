@@ -99,6 +99,10 @@ class BuraApp:
             self.cfg.update(saved)
 
         self.mouse = Mouse()
+        if self.mouse.found:
+            print(f"[Bura] MAKCU found on {self.mouse.port_name}")
+        else:
+            print("[Bura] WARNING: MAKCU not found — mouse moves will do nothing")
         self.capture = None
         self.aim = None
         self.running = True
@@ -113,20 +117,26 @@ class BuraApp:
 
     def _ensure_camera(self):
         if self.capture is None:
+            fov = max(
+                int(self.cfg.get("fovx", 50)),
+                int(self.cfg.get("fovy", 50)),
+                int(self.cfg.get("magnet_fov", 50)),
+            ) * 2
             try:
-                self.capture = DXGICapture(fov=max(
-                    int(self.cfg.get("fovx", 50)),
-                    int(self.cfg.get("fovy", 50)),
-                    int(self.cfg.get("magnet_fov", 50)),
-                ) * 2)
-            except Exception:
-                self.capture = DirectXCapture(fov=max(
-                    int(self.cfg.get("fovx", 50)),
-                    int(self.cfg.get("fovy", 50)),
-                ) * 2)
+                self.capture = DXGICapture(fov=fov)
+                print(f"[Bura] capture: DXGI (bettercam), fov={fov}")
+            except Exception as e1:
+                print(f"[Bura] DXGI failed ({e1}), falling back to GDI")
+                try:
+                    self.capture = DirectXCapture(fov=fov)
+                    print(f"[Bura] capture: GDI, fov={fov}")
+                except Exception as e2:
+                    print(f"[Bura] GDI also failed: {e2}")
+                    return
 
         if self.aim is None:
             self.aim = aimbot(self.mouse, self.capture, self.cfg)
+            print("[Bura] aimbot initialized")
 
     def _setup_routes(self):
         @self.app.route("/", methods=["GET"])
@@ -173,9 +183,14 @@ class BuraApp:
 
     def _heartbeat_loop(self):
         """Main aim loop — runs in a thread."""
+        _err_count = 0
         while self.running:
             try:
                 self._ensure_camera()
+
+                if self.aim is None:
+                    time.sleep(0.1)
+                    continue
 
                 if _should_fire(self.cfg):
                     self.aim.trigger(self.cfg)
@@ -183,11 +198,12 @@ class BuraApp:
                 if _magnet_should_fire(self.cfg):
                     self.aim.magnet(self.cfg)
 
-                # Spinbot on separate key (optional)
-                # self.aim.spinbot(self.cfg)
-
             except Exception as e:
-                logging.debug(f"aim loop error: {e}")
+                _err_count += 1
+                if _err_count <= 10:
+                    print(f"[Bura] aim loop error #{_err_count}: {e}")
+                elif _err_count == 11:
+                    print("[Bura] suppressing further errors")
 
             time.sleep(0.001)  # ~1000 Hz polling
 

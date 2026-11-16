@@ -340,9 +340,7 @@ class aimbot:
                 time.sleep(max(0.01, d))
                 self.mouse.click()
 
-        new_cfg = load_config()
-        if new_cfg:
-            self.cfg = new_cfg
+        # Config is pushed from Flask route, no per-frame disk read
 
     # ---------- spinbot ----------
     def spinbot(self, cfg: dict = None):
