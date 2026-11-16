@@ -53,7 +53,7 @@ def apply_cfg(cfg: dict):
 
 COLOR_RANGES = {
     "yellow": {
-        "lower": np.array([18, 100, 120], dtype=np.uint8),
+        "lower": np.array([24, 100, 150], dtype=np.uint8),
         "upper": np.array([34, 255, 255], dtype=np.uint8),
     },
     "red": {

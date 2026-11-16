@@ -20,7 +20,7 @@ from flask import Flask, request, redirect, jsonify, Response
 
 from aimbot import aimbot, load_config, apply_cfg
 from Driver import Mouse
-from Capture import DirectXCapture, DXGICapture, grab_screen_jpg, center_info, list_game_windows
+from Capture import DirectXCapture, DXGICapture, grab_screen_jpg, center_info, list_game_windows, _list_windows
 from WebGui import get_html, _show_login_form
 from user32 import (vk_name, wait_for_key, get_async_key_state, get_screen_size,
                     get_foreground_window, get_window_text)
@@ -369,7 +369,12 @@ class BuraApp:
         @self.app.route("/api/capture/windows", methods=["POST"])
         def api_cap_windows():
             try:
-                return jsonify(ok=True, windows=list_game_windows(),
+                allw = _list_windows()
+                wins = list_game_windows()
+                filtered = bool(wins)
+                if not wins:        # filter hid everything: show raw list so the game can be spotted
+                    wins = sorted(allw, key=lambda w: w["w"] * w["h"], reverse=True)[:20]
+                return jsonify(ok=True, windows=wins, total=len(allw), filtered=filtered,
                                current=str(self.cfg.get("capture_window", "VALORANT")))
             except Exception as e:
                 return jsonify(ok=False, err=f"{type(e).__name__}: {e}", windows=[])

@@ -366,7 +366,7 @@ _JS = r"""
         if(o.value&&o.value===r.current)o.selected=true;
         sel.appendChild(o);
       });
-      out(r.ok?((r.windows||[]).length+' windows. Pick the game window and press Use (Auto = VALORANT).'):('List failed: '+r.err));
+      out(r.ok?((r.windows||[]).length+' windows (visible total '+r.total+(r.filtered?'':', filter hid all -> raw list')+'). Pick the game window and press Use (Auto = VALORANT).'):('List failed: '+r.err));
     }).catch(function(e){out('Request failed: '+e)});
   }
   function _useWin(t){
