@@ -210,7 +210,8 @@ class BuraApp:
 
             # Convert numeric fields
             for key in ["fovx", "fovy", "speedX", "speedY", "offset", "tolerance",
-                        "deadzone_x", "deadzone_y", "pixel_distance", "magnet_fov"]:
+                        "deadzone_x", "deadzone_y", "pixel_distance", "magnet_fov",
+                        "hold_pct", "lock_settle_ms", "offset_x"]:
                 if key in form:
                     try:
                         form[key] = int(float(form[key]))
@@ -218,7 +219,8 @@ class BuraApp:
                         pass
 
             for key in ["base_delay", "magnet_strength", "magnet_smooth",
-                        "game_sens", "recoil_x", "recoil_y", "recoil_duration"]:
+                        "game_sens", "recoil_x", "recoil_y", "recoil_duration",
+                        "lock_gain", "cpp_smooth", "px_scale"]:
                 if key in form:
                     try:
                         form[key] = float(form[key])

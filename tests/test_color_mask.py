@@ -7,7 +7,9 @@ import types
 # aimbot imports Windows-only modules; stub them for headless runs
 for n in ("win32api", "win32con"):
     sys.modules.setdefault(n, types.SimpleNamespace(GetAsyncKeyState=lambda k: 0))
+import aimbot
 from aimbot import _color_mask
+aimbot.ENGINE["name"] = "legacy"      # these tests cover the legacy hysteresis mask
 
 def rgb(frame, x0, y0, x1, y1, c):
     frame[y0:y1, x0:x1] = (c[2], c[1], c[0])          # frame is BGR

@@ -5,6 +5,7 @@ Changes: smooth movement, no jitter, human-like curves.
 """
 
 import numpy as np
+import cbcore
 import cv2
 import time
 import ctypes
@@ -74,7 +75,16 @@ COLOR_RANGES = {
 
 # ---------- mask helpers ----------
 
+ENGINE = {"name": "cpp"}          # "cpp" = port of the C++ ColorBot, "legacy" = old Python path
+
+
 def _color_mask(hsv, tag: str, tol: int = 0):
+    if ENGINE["name"] != "legacy":
+        return cbcore.build_mask(hsv, tag)
+    return _color_mask_legacy(hsv, tag, tol)
+
+
+def _color_mask_legacy(hsv, tag: str, tol: int = 0):
     """inRange over every band of the color (red has two), tolerance widens each."""
     cr = COLOR_RANGES.get(tag, COLOR_RANGES["yellow"])
     bands = [(cr["lower"], cr["upper"])]
@@ -158,6 +168,7 @@ def _render_png(roi, mask, target=None, ext=".png") -> bytes:
 
 def _roi_mask(frame, cfg: dict):
     """Crop the FOV box around the frame center and build the color mask."""
+    ENGINE["name"] = str(cfg.get("aim_engine", "cpp"))
     fh, fw = frame.shape[0], frame.shape[1]
     cy, cx = fh // 2, fw // 2
     hx = int(cfg.get("fovx", 50))
@@ -401,6 +412,7 @@ class aimbot:
         self.key_state = False
 
         self._st_trigger = _SmoothState()
+        self._cpp = cbcore.CppAim()
         self._st_flick = _SmoothState()
         self._st_magnet = _SmoothState()
 
@@ -537,6 +549,14 @@ class aimbot:
             self.cfg = cfg
 
         frame, fresh = self.capture.read_new("trigger")
+        ENGINE["name"] = str(self.cfg.get("aim_engine", "cpp"))
+        if ENGINE["name"] != "legacy":
+            # The C++ engine paces itself by time (reaction, settle, corrections still in flight).
+            # Gating on "frame changed" would freeze it on a static scene: nothing moves, so the
+            # next frame is identical, so nothing ever moves.
+            if frame is None:
+                return
+            return self._trigger_cpp(frame)
         if frame is None or not fresh:
             return
 
@@ -598,6 +618,9 @@ class aimbot:
             self.mouse.move(mx, my)
             self.n_moves += 1
 
+        self._tail(raw_dx, raw_dy)
+
+    def _tail(self, raw_dx, raw_dy):
         # Recoil
         if self.cfg.get("recoil_auto", False):
             rx = float(self.cfg.get("recoil_x", 0))
@@ -621,6 +644,29 @@ class aimbot:
                 d += random.gauss(0, d * 0.1)
                 time.sleep(max(0.01, d))
                 self.mouse.click()
+
+    def _trigger_cpp(self, frame):
+        ts = time.perf_counter()
+        roi, mask = _roi_mask(frame, self.cfg)
+        if roi is None:
+            return
+        r = self._cpp.update(mask, self.cfg, ts, float(self.cfg.get("px_scale", 1.0)))
+        npx = int(cv2.countNonZero(mask))
+        if not r["found"]:
+            self.log.append((ts, "no_pixels", 0, 0.0, 0.0, 0, 0))
+            return
+        dx, dy = r["dx"], r["dy"]
+        rcx, rcy = roi.shape[1] // 2, roi.shape[0] // 2
+        if ts - self._hit_t > 0.4:
+            self._hit_t = ts
+            self.hit = {"t": time.time(), "png": _render_png(roi, mask, (rcx + dx, rcy + dy))}
+        mx, my = int(r["mx"]), int(r["my"])
+        self.dbg = {"mx": mx, "my": my}
+        self.log.append((ts, r["why"], npx, round(dx, 1), round(dy, 1), mx, my))
+        if mx or my:
+            self.mouse.move(mx, my)
+            self.n_moves += 1
+        self._tail(dx, dy)
 
     # ---------- spinbot ----------
     def spinbot(self, cfg: dict = None):

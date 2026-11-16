@@ -519,6 +519,15 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
             _s("fovy", "FOV Y", cfg.get("fovy", 50), 10, 500),
         ),
         _g2(
+            _sel("aim_engine", "Engine", ["cpp", "legacy"], cfg.get("aim_engine", "cpp")),
+            _s("lock_gain", "Gain (counts/px)", cfg.get("lock_gain", 1.0), 0.1, 5.0, 0.05),
+        ),
+        _g3(
+            _s("hold_pct", "Hold %", cfg.get("hold_pct", 60), 0, 150),
+            _s("lock_settle_ms", "Settle ms", cfg.get("lock_settle_ms", 10), 1, 30),
+            _s("cpp_smooth", "Smooth", cfg.get("cpp_smooth", 0.5), 0.05, 1.0, 0.05),
+        ),
+        _g2(
             _s("speedX", "Speed X", cfg.get("speedX", 3), 1, 30),
             _s("speedY", "Speed Y", cfg.get("speedY", 3), 1, 30),
         ),
