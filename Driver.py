@@ -348,15 +348,26 @@ class Mouse:
             time.sleep(0.15)
         return True
 
-    def test_makcu(self) -> bool:
-        """Visible 25px square, always through the Makcu regardless of mode."""
+    def test_makcu(self) -> dict:
+        """Visible 25px square, always through the Makcu regardless of mode.
+        Returns diagnostic dict instead of bare bool."""
         mk = self.makcu
+        info = {"ok": False, "port": mk.port_name, "baud": mk.baud,
+                "term": repr(mk.term), "open": False, "version": ""}
         if not (mk.ser and mk.ser.is_open):
-            return False
+            return info
+        info["open"] = True
+        # check if device actually responds
+        try:
+            info["version"] = mk._send_cmd("km.version()")
+        except Exception as e:
+            info["version"] = f"ERR {e}"
+        # send moves
         for dx, dy in ((25, 0), (0, 25), (-25, 0), (0, -25)):
             mk.move(dx, dy)
             time.sleep(0.15)
-        return True
+        info["ok"] = True
+        return info
 
     # --- delegated API (same as MakcuMouse) ---
     def move(self, dx, dy):

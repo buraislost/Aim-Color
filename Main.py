@@ -326,7 +326,7 @@ class BuraApp:
 
         @self.app.route("/api/makcu/test", methods=["POST"])
         def api_makcu_test():
-            return jsonify(ok=self.mouse.test_makcu())
+            return jsonify(self.mouse.test_makcu())
 
         @self.app.route("/api/soft/test", methods=["POST"])
         def api_soft_test():

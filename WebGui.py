@@ -163,7 +163,7 @@ select option{background:var(--card2)}
 .dside .cap{margin-top:0}
 .cap{font-size:11px;color:var(--tx3);margin-top:6px;line-height:1.4}
 .lg{display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 4px 0 8px;vertical-align:baseline}
-.lg:first-child{margin-left:0}.lg.g{background:#3cff3c}.lg.b{background:#3ca0ff}.lg.w{background:#fff}.lg.m{background:#f0f}.lg.r{background:#ff4040}
+.lg:first-child{margin-left:0}.lg.g{background:#3cff3c}.lg.b{background:#3ca0ff}.lg.w{background:#fff}.lg.r{background:#ff4040}
 .chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .chip{background:var(--card2);border:1px solid var(--line);border-radius:var(--r2);padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .chip small{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em}
@@ -301,13 +301,8 @@ _JS = r"""
       // preload, then swap: assigning src directly blanks the image on every poll
       var sf=d.stream||{};
       set('d_fps',(sf.screen||0)+' / '+(sf.roi||0));
-      // watchdog: frame counter not moving for ~3 s while Debug is open -> reopen the streams
-      var sn=(d.stream_n||{}).screen;
-      if(window._strm){
-        if(sn===window._lastN){if(++window._dead>=6){streamsOff();streamsOn()}}else window._dead=0;
-      }else window._dead=0;
-      window._lastN=sn;
-      var se=d.stream_err||{};set('d_serr',(se.screen||se.roi)?('screen: '+(se.screen||'ok')+' / roi: '+(se.roi||'ok')):'ok');
+      // watchdog: stream reports 0 fps while Debug is open -> reopen it
+      if(window._strm&&!(sf.screen>0)){if(++window._dead>=4){streamsOff();streamsOn()}}else window._dead=0;
     }).catch(function(){}).then(function(){busy=false});
   }
   setInterval(function(){if(panel.classList.contains('on')&&!document.hidden)poll()},500);
@@ -324,7 +319,8 @@ _JS = r"""
   };
   $('b_test').onclick=function(){
     post('/api/makcu/test').then(function(r){
-      out(r.ok?'Sent a 25px square through the Makcu. The cursor should have moved.':'Makcu port is not open, nothing sent.');
+      if(r.ok) out('Sent 25px square via Makcu. Cursor should move.\\nVersion: '+(r.version||'(empty)')+'  Baud: '+r.baud+'  Port: '+r.port);
+      else out('Makcu not responding.\\nPort: '+(r.port||'none')+'  Open: '+r.open+'  Version: '+(r.version||'(empty)')+'  Baud: '+r.baud+'  Term: '+r.term+'\\nTry Probe baud to find the right baud rate.');
     });
   };
   $('b_soft').onclick=$('b_test_soft').onclick=function(){
@@ -558,7 +554,7 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
         '<i class="lg w"></i>capture center <i class="lg r"></i>real screen center</div></div>'
         '<div class="dside">'
         '<div class="shot"><img id="d_img" alt="FOV box | color mask"></div>'
-        '<div class="cap">Around crosshair &middot; <i class="lg g"></i>FOV box <i class="lg m"></i>detected color</div>'
+        '<div class="cap">FOV box | color mask</div>'
         '<div class="chips">'
         + _chip("Pixels", "d_px") + _chip("Target", "d_tgt") + _chip("Offset", "d_off")
         + _chip("Aim", "d_active") + _chip("Loop", "d_hz") + _chip("FPS scr / roi", "d_fps") +
@@ -570,7 +566,7 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
                                 ("Brightness", "d_mean"), ("Foreground", "d_fg")), True)
         + _grp("Aim loop", _kv(("Key / mode", "d_key"), ("Input", "d_in"), ("Moves sent", "d_moves"),
                                ("Last move", "d_last"), ("Samples / s", "d_rate"),
-                               ("Result mix (5 s)", "d_mix"), ("Stream error", "d_serr"), ("Last sample", "d_lastS"),
+                               ("Result mix (5 s)", "d_mix"), ("Last sample", "d_lastS"),
                                ("Sent |x|, |y| px", "d_sent")))
         + _grp("Last hit",
                '<div class="shot"><img id="d_hit" alt="last frame with color"></div>'
