@@ -283,7 +283,10 @@ class Mouse:
 
     @property
     def _d(self):
-        return self.makcu if self.mode == "makcu" else self.soft
+        # no Makcu plugged in -> fall back to SendInput instead of dead input
+        if self.mode == "makcu" and self.makcu.found:
+            return self.makcu
+        return self.soft
 
     def set_mode(self, mode: str):
         if mode in self.MODES:
@@ -337,6 +340,13 @@ class Mouse:
         finally:
             self.reconnect()
         return {"port": port, "results": res}
+
+    def test_soft(self) -> bool:
+        """Visible 25px square through SendInput, regardless of mode."""
+        for dx, dy in ((25, 0), (0, 25), (-25, 0), (0, -25)):
+            self.soft.move(dx, dy)
+            time.sleep(0.15)
+        return True
 
     def test_makcu(self) -> bool:
         """Visible 25px square, always through the Makcu regardless of mode."""

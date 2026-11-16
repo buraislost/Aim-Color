@@ -16,7 +16,7 @@ pip install pyinstaller flask opencv-python numpy pyserial bettercam pystray Pil
 
 :: Build exe
 echo [2/3] Building Bura.exe...
-pyinstaller --onefile --console --name Bura ^
+pyinstaller --onefile --noconsole --name Bura ^
     --add-data "WebGui.py;." ^
     --hidden-import flask ^
     --hidden-import pystray ^

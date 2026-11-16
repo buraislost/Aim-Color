@@ -20,9 +20,9 @@ from flask import Flask, request, redirect, jsonify, Response
 
 from aimbot import aimbot, load_config, apply_cfg
 from Driver import Mouse
-from Capture import DirectXCapture, DXGICapture
+from Capture import DirectXCapture, DXGICapture, grab_screen_jpg
 from WebGui import get_html, _show_login_form
-from user32 import (get_async_key_state, get_screen_size,
+from user32 import (vk_name, wait_for_key, get_async_key_state, get_screen_size,
                     get_foreground_window, get_window_text)
 
 # ---------- defaults ----------
@@ -47,7 +47,9 @@ _DEFAULT_CFG = {
     "magnet_version": "v1",
     "magnet_key": 0x02,
     "magnet_triggerbot": False,
-    "trigger_hotkey": 0x14,   # Caps Lock
+    "trigger_hotkey": 0x14,   # legacy, superseded by hold_key / toggle_key
+    "hold_key": 0x14,         # Caps Lock
+    "toggle_key": 0x14,
     "game_sens": 1.0,
     "anti_strafe": False,
     "humanize": True,
@@ -70,7 +72,7 @@ magnet_option = ["v1", "v2"]
 
 def _should_fire(cfg: dict) -> bool:
     mode = cfg.get("aim_mode", "hold")
-    hotkey = int(cfg.get("trigger_hotkey", 0x14))
+    hotkey = int(cfg.get("hold_key", cfg.get("trigger_hotkey", 0x14)))
     if mode == "always":
         return True
     if mode == "hold":
@@ -117,6 +119,10 @@ class BuraApp:
         self.magnet_down = False
         self.active = False
         self.loop_hz = 0.0
+        self.stream_fps = {"screen": 0.0, "roi": 0.0}
+        self._sgen = {"screen": 0, "roi": 0}
+        self.stream_n = {"screen": 0, "roi": 0}      # frames sent, lets the page detect a stalled stream
+        self.stream_err = {"screen": "", "roi": ""}
         self.active_hist = collections.deque(maxlen=2000)
         self.last_err = ""
         self.last_err_t = 0.0
@@ -218,9 +224,16 @@ class BuraApp:
             except Exception:
                 d["fg"] = ""
             d["trace"] = self.aim.summary(5.0) if self.aim else None
+            d["stream"] = dict(self.stream_fps)
+            d["stream_n"] = dict(self.stream_n)
+            d["stream_err"] = dict(self.stream_err)
             try:
                 self._ensure_camera()
                 d["detect"] = self.aim.peek(self.cfg)[0]
+                c = getattr(self.capture, "center", None)
+                d["capture"] = {"center": list(c) if c else None,
+                                "src": getattr(self.capture, "center_src", "screen"),
+                                "win": str(self.cfg.get("capture_window", "VALORANT"))}
             except Exception as e:
                 d["detect"] = {"err": f"{type(e).__name__}: {e}"}
             return jsonify(d)
@@ -236,6 +249,64 @@ class BuraApp:
                 return Response(status=204)
             return Response(png, mimetype="image/png",
                             headers={"Cache-Control": "no-store"})
+
+        @self.app.route("/api/debug/screen.jpg")
+        def api_debug_screen():
+            try:
+                self._ensure_camera()
+                jpg = grab_screen_jpg(self.cfg, getattr(self.capture, "center", None),
+                                      getattr(self.capture, "center_src", "screen"))
+            except Exception as e:
+                self._note_err(e)
+                jpg = None
+            if not jpg:
+                return Response(status=204)
+            return Response(jpg, mimetype="image/jpeg", headers={"Cache-Control": "no-store"})
+
+        def _mjpeg(name, make, fps):
+            self._sgen[name] += 1
+            mine = self._sgen[name]          # a newer request for the same stream supersedes this one
+
+            def gen():
+                dt, n, t0 = 1.0 / fps, 0, time.perf_counter()
+                try:
+                    while self.running and self._sgen[name] == mine:
+                        t1 = time.perf_counter()
+                        try:
+                            jpg = make()
+                        except Exception as e:
+                            self.stream_err[name] = f"{type(e).__name__}: {e}"
+                            jpg = None
+                            time.sleep(0.2)
+                        if jpg:
+                            self.stream_n[name] += 1
+                            yield (b"--f\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n"
+                                   % len(jpg)) + jpg + b"\r\n"
+                            n += 1
+                        now = time.perf_counter()
+                        if now - t0 >= 1.0:
+                            self.stream_fps[name] = round(n / (now - t0), 1)
+                            n, t0 = 0, now
+                        rest = dt - (now - t1)
+                        time.sleep(rest if rest > 0 else 0.001)
+                finally:
+                    if self._sgen[name] == mine:
+                        self.stream_fps[name] = 0.0
+            return Response(gen(), mimetype="multipart/x-mixed-replace; boundary=f",
+                            headers={"Cache-Control": "no-store"})
+
+        @self.app.route("/api/debug/stream/screen")
+        def api_stream_screen():
+            self._ensure_camera()
+            return _mjpeg("screen", lambda: grab_screen_jpg(
+                self.cfg, getattr(self.capture, "center", None),
+                getattr(self.capture, "center_src", "screen"), 960), 60)
+
+        @self.app.route("/api/debug/stream/roi")
+        def api_stream_roi():
+            self._ensure_camera()
+            return _mjpeg("roi", lambda: self.aim.debug_wide_jpg(
+                self.cfg, getattr(self.capture, "center", None)), 60)
 
         @self.app.route("/api/debug/hit.png")
         def api_debug_hit():
@@ -256,6 +327,25 @@ class BuraApp:
         @self.app.route("/api/makcu/test", methods=["POST"])
         def api_makcu_test():
             return jsonify(ok=self.mouse.test_makcu())
+
+        @self.app.route("/api/soft/test", methods=["POST"])
+        def api_soft_test():
+            return jsonify(ok=self.mouse.test_soft())
+
+        @self.app.route("/api/bind", methods=["POST"])
+        def api_bind():
+            b = request.get_json(silent=True) or {}
+            name = b.get("name")
+            if name not in ("hold_key", "toggle_key", "magnet_key"):
+                return jsonify(ok=False, err="bad name")
+            vk = wait_for_key(6.0)
+            if vk is None:
+                return jsonify(ok=False, err="timeout")
+            if vk == 0x1B:
+                return jsonify(ok=False, err="cancelled")
+            self.cfg[name] = int(vk)
+            apply_cfg(self.cfg)
+            return jsonify(ok=True, vk=int(vk), name=vk_name(vk))
 
         @self.app.route("/api/makcu/use", methods=["POST"])
         def api_makcu_use():
@@ -280,7 +370,9 @@ class BuraApp:
 
     def _aim_active(self) -> bool:
         mode = self.cfg.get("aim_mode", "hold")
-        down = get_async_key_state(int(self.cfg.get("trigger_hotkey", 0x14)))
+        legacy = self.cfg.get("trigger_hotkey", 0x14)
+        vk = int(self.cfg.get("toggle_key" if mode == "toggle" else "hold_key", legacy))
+        down = get_async_key_state(vk)
         self.hotkey_down = down
         if mode == "toggle" and down and not self._hk_prev:
             self._toggled = not self._toggled

@@ -3,6 +3,8 @@ WebGui.py — Flask WebGUI HTML template
 Tabbed config panel — Bura
 """
 
+from user32 import vk_name
+
 _CSS = """
 :root{
   --bg:#0b0b10;--panel:#12121a;--card:#171722;--card2:#1c1c2a;
@@ -19,7 +21,7 @@ body{
   min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:20px 12px;
   -webkit-font-smoothing:antialiased
 }
-.wrap{width:100%;max-width:440px}
+.wrap{width:100%;max-width:440px;transition:max-width .15s}.wrap.wide{max-width:1180px}
 
 /* header */
 .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
@@ -39,12 +41,12 @@ body{
 
 /* tabs */
 .tabs{
-  display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:4px;margin-bottom:14px;
+  display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:4px;margin-bottom:14px;
   background:var(--panel);border:1px solid var(--line);border-radius:var(--r)
 }
 .tabs button{
   background:none;border:none;color:var(--tx3);font:600 12px inherit;font-family:inherit;
-  padding:8px 0;border-radius:var(--r2);cursor:pointer;transition:.15s
+  padding:8px 0;border-radius:var(--r2);cursor:pointer;transition:.15s;white-space:nowrap
 }
 .tabs button:hover{color:var(--tx2);background:rgba(255,255,255,.03)}
 .tabs button.on{color:#fff;background:var(--ac);box-shadow:0 4px 14px var(--acg)}
@@ -152,9 +154,33 @@ select option{background:var(--card2)}
 .shot{background:#000;border-radius:var(--r2);min-height:130px;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .shot img{width:100%;max-height:260px;object-fit:contain;image-rendering:pixelated;display:block}
 .shot img:not([src]){display:none}
+.dtop{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+.dtop>div{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dtop .shot{min-height:0}
+.dtop .shot img{width:100%;height:100%;max-height:none;object-fit:contain}
+.dtop .big{aspect-ratio:16/9}
+.dside .shot{flex:1;min-height:120px}
+.dside .cap{margin-top:0}
+.cap{font-size:11px;color:var(--tx3);margin-top:6px;line-height:1.4}
+.lg{display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 4px 0 8px;vertical-align:baseline}
+.lg:first-child{margin-left:0}.lg.g{background:#3cff3c}.lg.b{background:#3ca0ff}.lg.w{background:#fff}.lg.m{background:#f0f}.lg.r{background:#ff4040}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.chip{background:var(--card2);border:1px solid var(--line);border-radius:var(--r2);padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.chip small{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em}
+.chip b{font-size:14px;font-weight:600;color:var(--tx);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-items:start}
+details.grp{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:0 14px}
+details.grp summary{cursor:pointer;list-style:none;padding:12px 0;font-size:12px;font-weight:600;color:var(--tx2);display:flex;justify-content:space-between}
+details.grp summary::-webkit-details-marker{display:none}
+details.grp summary::after{content:'+';color:var(--tx3)}
+details.grp[open] summary{color:var(--tx)}
+details.grp[open] summary::after{content:'−'}
+details.grp .gb{display:flex;flex-direction:column;gap:10px;padding-bottom:14px}
+@media(max-width:820px){.grps{grid-template-columns:1fr}.chips{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:820px){.dtop{grid-template-columns:1fr}}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;font-size:12px}
 .kv span:nth-child(odd){color:var(--tx3)}
-.kv span:nth-child(even){color:var(--tx);text-align:right;font-variant-numeric:tabular-nums;word-break:break-all}
+.kv span:nth-child(even){color:var(--tx);text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:0}
 .diag{padding:10px 12px;border-radius:var(--r2);font-size:12px;font-weight:600;background:var(--card2);border:1px solid var(--line2);color:var(--tx2)}
 .diag.ok{color:#3ddc97;border-color:rgba(61,220,151,.45)}
 .diag.bad{color:#ff9a7a;border-color:rgba(255,122,122,.45)}
@@ -186,12 +212,31 @@ pre.out{
 _JS = r"""
 (function(){
   var tabs=document.getElementById('tabs'),KEY='bura_tab';
+  // MJPEG streams: swapping src to a 1px gif is what actually aborts the request in the browser
+  var NIL='data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+  function streamsOn(){
+    var sc=document.getElementById('d_scr'),ro=document.getElementById('d_img');
+    if(!sc||!ro)return;window._strm=1;window._dead=0;
+    sc.src='/api/debug/stream/screen?'+Date.now();ro.src='/api/debug/stream/roi?'+Date.now();
+  }
+  function streamsOff(){
+    var sc=document.getElementById('d_scr'),ro=document.getElementById('d_img');
+    window._strm=0;if(sc)sc.src=NIL;if(ro)ro.src=NIL;
+  }
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){if(window._strm)streamsOff()}
+    else if(window._tab==='dbg'&&!window._strm)streamsOn();
+  });
+  window.addEventListener('pagehide',function(){if(window._strm)streamsOff()});
   function show(t){
     var b=tabs.querySelector('[data-t="'+t+'"]'),p=document.getElementById('p-'+t);
     if(!b||!p)return false;
     document.querySelectorAll('.tabs button').forEach(function(x){x.classList.remove('on')});
     document.querySelectorAll('.pn').forEach(function(x){x.classList.remove('on')});
     b.classList.add('on');p.classList.add('on');
+    document.querySelector('.wrap').classList.toggle('wide',t==='dbg');
+    window._tab=t;
+    if(t==='dbg'&&!document.hidden){if(!window._strm)streamsOn()}else if(window._strm)streamsOff();
     try{localStorage.setItem(KEY,t)}catch(e){}
     return true;
   }
@@ -203,7 +248,7 @@ _JS = r"""
 
   // ---- debug tab: live polling only while the tab is open ----
   var panel=document.getElementById('p-dbg'),busy=false;
-  function $(i){return document.getElementById(i)}
+  function $(i){return document.getElementById(i)||{}}
   function set(id,v){$(id).textContent=(v===null||v===undefined||v==='')?'—':v}
   function lbl(t){return String(t).replace(/\r/g,'\\r').replace(/\n/g,'\\n')}
   function out(t){$('d_out').textContent=t}
@@ -216,8 +261,8 @@ _JS = r"""
     if(l.err){m='Loop error: '+l.err;c='bad'}
     else if(t.err){m='Capture error: '+t.err;c='bad'}
     else if(t.mean!=null&&t.mean<1){m='Capture is black: the game is not being grabbed (check display mode / monitor)';c='bad'}
-    else if(!tr||!tr.calls){m='Aim is not sampling: mode "'+d.aim_mode+'" needs the hotkey (Caps Lock), or capture has not started.';c='bad'}
-    else if(mv>0&&i.mode==='makcu'&&!i.makcu_found){m='Aim computes moves but Makcu is not connected (see Makcu below).';c='bad'}
+    else if(!tr||!tr.calls){m='Aim is not sampling: mode "'+d.aim_mode+'" needs its key (see Keys tab), or capture has not started.';c='bad'}
+    else if(mv>0&&i.mode==='makcu'&&!i.makcu_found){m='Makcu not found: moves are going through SendInput fallback.';c='ok'}
     else if(mv>0){m='OK: aim sent '+tr.sent[0]+' / '+tr.sent[1]+' px in 5 s ('+mv+' move samples).';c='ok'}
     else if(dz>=np&&dz>=sp&&dz>0){m='Target is inside the dead zone: lower Dead X / Dead Y.';c='bad'}
     else if(sp>np){m='Moves round down to 0: Speed is too high (smaller = faster).';c='bad'}
@@ -232,6 +277,8 @@ _JS = r"""
       set('d_tgt',t.target?t.target.join(', '):null);
       set('d_off',t.dx!=null?t.dx+', '+t.dy:null);
       set('d_frame',t.frame?t.frame.join('x')+' (screen '+d.screen.join('x')+')':null);
+      var cp=d.capture||{};
+      set('d_cap',cp.center?cp.center.join(', ')+' ('+cp.src+(cp.src==='screen'?': window "'+cp.win+'" not found':'')+')':null);
       set('d_mean',t.mean);
       set('d_active',l.active?'ON':'OFF');
       set('d_key',(l.hotkey_down?'down':'up')+' / '+d.aim_mode);
@@ -252,8 +299,15 @@ _JS = r"""
       if(tr&&tr.hit_age!=null)$('d_hitage').textContent='Last frame where the color was seen: '+tr.hit_age+' s ago.';
       diag(d);
       // preload, then swap: assigning src directly blanks the image on every poll
-      var im=new Image();im.onload=function(){$('d_img').src=im.src};
-      im.src='/api/debug/frame.png?'+Date.now();
+      var sf=d.stream||{};
+      set('d_fps',(sf.screen||0)+' / '+(sf.roi||0));
+      // watchdog: frame counter not moving for ~3 s while Debug is open -> reopen the streams
+      var sn=(d.stream_n||{}).screen;
+      if(window._strm){
+        if(sn===window._lastN){if(++window._dead>=6){streamsOff();streamsOn()}}else window._dead=0;
+      }else window._dead=0;
+      window._lastN=sn;
+      var se=d.stream_err||{};set('d_serr',(se.screen||se.roi)?('screen: '+(se.screen||'ok')+' / roi: '+(se.roi||'ok')):'ok');
     }).catch(function(){}).then(function(){busy=false});
   }
   setInterval(function(){if(panel.classList.contains('on')&&!document.hidden)poll()},500);
@@ -273,6 +327,18 @@ _JS = r"""
       out(r.ok?'Sent a 25px square through the Makcu. The cursor should have moved.':'Makcu port is not open, nothing sent.');
     });
   };
+  $('b_soft').onclick=$('b_test_soft').onclick=function(){
+    post('/api/soft/test').then(function(r){
+      out(r.ok?'Sent a 25px square through SendInput. The cursor should have moved.':'SendInput failed.');
+    }).catch(function(e){out('Request failed: '+e)});
+  };
+  document.querySelectorAll('.kb').forEach(function(b){
+    b.onclick=function(){
+      var old=b.textContent;b.textContent='Press a key... (Esc cancels)';b.disabled=true;
+      post('/api/bind',{name:b.dataset.bind}).then(function(r){b.textContent=r.ok?r.name:old})
+        .catch(function(){b.textContent=old}).then(function(){b.disabled=false});
+    };
+  });
   $('b_probe').onclick=function(){
     out('Probing baud rates, about 5 s...');
     post('/api/makcu/probe').then(function(r){
@@ -456,45 +522,68 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
         '<p class="hint">Pick a source, then press Apply. Connect re-scans the COM ports.</p>',
     )
 
+    # --- Tab: Keys (rebindable: any keyboard key or mouse button) ---
+    def _key(name, label, vk):
+        return (
+            f'<div class="s"><span class="l">{label}</span>'
+            f'<button type="button" class="btn2 kb" data-bind="{name}">{vk_name(vk)}</button></div>'
+        )
+
+    tab_keys = _card(
+        _key("hold_key", "Hold key", cfg.get("hold_key", 0x14)),
+        _key("toggle_key", "Toggle key", cfg.get("toggle_key", 0x14)),
+        _key("magnet_key", "Magnet key", cfg.get("magnet_key", 0x02)),
+        '<p class="hint">Hold key is used when Mode = hold, Toggle key when Mode = toggle. '
+        'Click, then press any key or mouse button (Esc cancels). Saved instantly.</p>',
+    )
+
     # --- Tab: Debug ---
+    def _kv(*pairs):
+        return '<div class="kv">' + "".join(
+            f'<span>{l}</span><span id="{i}">—</span>' for l, i in pairs) + '</div>'
+
+    def _chip(label, i):
+        return f'<div class="chip"><small>{label}</small><b id="{i}">—</b></div>'
+
+    def _grp(title, body, open_=False):
+        return (f'<details class="grp"{" open" if open_ else ""}>'
+                f'<summary>{title}</summary><div class="gb">{body}</div></details>')
+
     tab_debug = (
         '<section class="card dbg">'
         '<div class="diag" id="d_diag">Waiting for data...</div>'
+        '<div class="dtop">'
+        '<div><div class="shot big"><img id="d_scr" alt="full screen"></div>'
+        '<div class="cap">Screen &middot; <i class="lg g"></i>aim FOV <i class="lg b"></i>magnet FOV '
+        '<i class="lg w"></i>capture center <i class="lg r"></i>real screen center</div></div>'
+        '<div class="dside">'
         '<div class="shot"><img id="d_img" alt="FOV box | color mask"></div>'
-        '<div class="kv">'
-        '<span>Color</span><span id="d_color">—</span>'
-        '<span>Pixels in FOV</span><span id="d_px">—</span>'
-        '<span>Target (x, y)</span><span id="d_tgt">—</span>'
-        '<span>Offset (dx, dy)</span><span id="d_off">—</span>'
-        '<span>Frame</span><span id="d_frame">—</span>'
-        '<span>Brightness</span><span id="d_mean">—</span>'
+        '<div class="cap">Around crosshair &middot; <i class="lg g"></i>FOV box <i class="lg m"></i>detected color</div>'
+        '<div class="chips">'
+        + _chip("Pixels", "d_px") + _chip("Target", "d_tgt") + _chip("Offset", "d_off")
+        + _chip("Aim", "d_active") + _chip("Loop", "d_hz") + _chip("FPS scr / roi", "d_fps") +
+        '</div></div>'
         '</div></section>'
-        '<section class="card dbg">'
-        '<div class="shot"><img id="d_hit" alt="last frame with color"></div>'
-        '<div class="hint" id="d_hitage">Last frame where the color was seen (kept while you alt-tab back here).</div>'
-        '<div class="kv">'
-        '<span>Foreground</span><span id="d_fg">—</span>'
-        '<span>Aim samples / s</span><span id="d_rate">—</span>'
-        '<span>Result mix (5 s)</span><span id="d_mix">—</span>'
-        '<span>Last sample</span><span id="d_lastS">—</span>'
-        '<span>Sent (|x|, |y| px)</span><span id="d_sent">—</span>'
-        '</div></section>'
-        '<section class="card dbg"><div class="kv">'
-        '<span>Aim</span><span id="d_active">—</span>'
-        '<span>Hotkey / mode</span><span id="d_key">—</span>'
-        '<span>Loop</span><span id="d_hz">—</span>'
-        '<span>Input</span><span id="d_in">—</span>'
-        '<span>Moves sent</span><span id="d_moves">—</span>'
-        '<span>Last move</span><span id="d_last">—</span>'
-        '</div></section>'
-        '<section class="card dbg">'
-        '<div class="row">'
-        '<button type="button" class="btn2" id="b_info">Query</button>'
-        '<button type="button" class="btn2" id="b_probe">Probe baud</button>'
-        '<button type="button" class="btn2" id="b_test">Test move</button>'
-        '</div>'
-        '<pre class="out" id="d_out">Makcu output shows here.</pre>'
-        '</section>'
+        '<div class="grps">'
+        + _grp("Detection", _kv(("Color", "d_color"),
+                                ("Frame", "d_frame"), ("Capture center", "d_cap"),
+                                ("Brightness", "d_mean"), ("Foreground", "d_fg")), True)
+        + _grp("Aim loop", _kv(("Key / mode", "d_key"), ("Input", "d_in"), ("Moves sent", "d_moves"),
+                               ("Last move", "d_last"), ("Samples / s", "d_rate"),
+                               ("Result mix (5 s)", "d_mix"), ("Stream error", "d_serr"), ("Last sample", "d_lastS"),
+                               ("Sent |x|, |y| px", "d_sent")))
+        + _grp("Last hit",
+               '<div class="shot"><img id="d_hit" alt="last frame with color"></div>'
+               '<div class="hint" id="d_hitage">Last frame where the color was seen.</div>')
+        + '</div>'
+        + _grp("Input tools",
+               '<div class="row">'
+               '<button type="button" class="btn2" id="b_info">Query</button>'
+               '<button type="button" class="btn2" id="b_probe">Probe baud</button>'
+               '<button type="button" class="btn2" id="b_test">Test Makcu</button>'
+               '<button type="button" class="btn2" id="b_soft">Test SendInput</button>'
+               '</div>'
+               '<pre class="out" id="d_out">Output shows here.</pre>')
     )
 
     # --- Tab: Recoil ---
@@ -529,6 +618,7 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
     <button type="button" data-t="trig">Trigger</button>
     <button type="button" data-t="mag">Magnet</button>
     <button type="button" data-t="rec">Recoil</button>
+    <button type="button" data-t="key">Keys</button>
     <button type="button" data-t="inp">Input</button>
     <button type="button" data-t="dbg">Debug</button>
   </nav>
@@ -537,6 +627,7 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
     <div class="pn" id="p-trig">{tab_trigger}</div>
     <div class="pn" id="p-mag">{tab_magnet}</div>
     <div class="pn" id="p-rec">{tab_recoil}</div>
+    <div class="pn" id="p-key">{tab_keys}</div>
     <div class="pn" id="p-inp">{tab_input}</div>
     <div class="pn" id="p-dbg">{tab_debug}</div>
     <div class="ab"><button class="btn" type="submit">Apply</button></div>
