@@ -165,7 +165,7 @@ class MakcuMouse:
                         time.sleep(0.15)
                         reply = s.read(s.in_waiting or 64).decode(errors="replace")
                 except Exception as e:
-                    reply = f"ERR {type(e).__name__}"
+                    reply = f"ERR {type(e).__name__}: {e}"
                 out.append({"baud": b, "term": t, "reply": reply})
         return out
 

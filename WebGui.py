@@ -388,6 +388,17 @@ _JS = r"""
     post('/api/makcu/probe').then(function(r){
       var box=$('d_out');box.textContent='';
       if(!r.port){box.textContent='No port with a known Makcu VID:PID. Press Query to list ports.';return}
+      var errs=r.results.filter(function(x){return x.reply&&x.reply.indexOf('ERR')===0});
+      if(errs.length===r.results.length&&errs.length){
+        var m=errs[0].reply, low=m.toLowerCase(), why;
+        if(low.indexOf('filenotfound')>=0||low.indexOf('cannot find')>=0||low.indexOf('(2,')>=0)
+          why='Port no longer exists (cable/driver dropped). Replug the Makcu and press Query.';
+        else if(low.indexOf('permission')>=0||low.indexOf('access is denied')>=0)
+          why='COM port is held by another program, not a baud problem. Close every other Bura.exe (check Task Manager), Makcu/serial tools and Arduino IDE, then replug the Makcu and probe again.';
+        else why='Port cannot be opened at any baud (not a baud problem). Replug the Makcu and close other programs using it.';
+        box.appendChild(document.createTextNode('Port '+r.port+' cannot be opened. Error: '+m.slice(0,160)+' >> '+why));
+        return;
+      }
       box.appendChild(document.createTextNode('Port '+r.port+'. Pick a row that got a reply:'));
       r.results.forEach(function(x){
         var row=document.createElement('div');row.className='pr';
