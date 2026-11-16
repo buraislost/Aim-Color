@@ -349,24 +349,39 @@ class Mouse:
         return True
 
     def test_makcu(self) -> dict:
-        """Visible 25px square, always through the Makcu regardless of mode.
-        Returns diagnostic dict instead of bare bool."""
+        """Diagnostic test — 5 version queries + 4 moves, log every error.
+        If version replies are inconsistent, baud is wrong or signal is unstable."""
         mk = self.makcu
         info = {"ok": False, "port": mk.port_name, "baud": mk.baud,
-                "term": repr(mk.term), "open": False, "version": ""}
+                "term": repr(mk.term), "open": False,
+                "versions": [], "move_errors": [], "write_count": 0,
+                "ports_now": []}
+        # re-scan ports to see if the device dropped mid-session
+        try:
+            info["ports_now"] = [p["device"] + "(" + ("match" if p["match"] else "nomatch") + ")"
+                                 for p in MakcuMouse.list_ports()]
+        except Exception as e:
+            info["ports_now"] = [f"ERR {e}"]
         if not (mk.ser and mk.ser.is_open):
             return info
         info["open"] = True
-        # check if device actually responds
-        try:
-            info["version"] = mk._send_cmd("km.version()")
-        except Exception as e:
-            info["version"] = f"ERR {e}"
-        # send moves
+        # fire 5 version queries — if some come back empty, signal is unstable
+        for i in range(5):
+            try:
+                reply = mk._send_cmd("km.version()")
+                info["versions"].append(reply or "(empty)")
+            except Exception as e:
+                info["versions"].append(f"ERR {type(e).__name__}: {e}")
+            time.sleep(0.08)
+        # send moves, log each write result
         for dx, dy in ((25, 0), (0, 25), (-25, 0), (0, -25)):
-            mk.move(dx, dy)
+            try:
+                mk.move(dx, dy)
+                info["write_count"] += 1
+            except Exception as e:
+                info["move_errors"].append(f"{dx},{dy}: {type(e).__name__}: {e}")
             time.sleep(0.15)
-        info["ok"] = True
+        info["ok"] = info["write_count"] == 4 and any(v and not v.startswith("ERR") and v != "(empty)" for v in info["versions"])
         return info
 
     # --- delegated API (same as MakcuMouse) ---

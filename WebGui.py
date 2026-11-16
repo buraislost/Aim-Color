@@ -319,8 +319,20 @@ _JS = r"""
   };
   $('b_test').onclick=function(){
     post('/api/makcu/test').then(function(r){
-      if(r.ok) out('Sent 25px square via Makcu. Cursor should move.\\nVersion: '+(r.version||'(empty)')+'  Baud: '+r.baud+'  Port: '+r.port);
-      else out('Makcu not responding.\\nPort: '+(r.port||'none')+'  Open: '+r.open+'  Version: '+(r.version||'(empty)')+'  Baud: '+r.baud+'  Term: '+r.term+'\\nTry Probe baud to find the right baud rate.');
+      var lines = [];
+      lines.push(r.ok ? 'MAKCU OK — cursor moved.' : 'MAKCU PROBLEM — details below.');
+      lines.push('Port: '+(r.port||'none')+'  Baud: '+r.baud+'  Term: '+r.term+'  Open: '+r.open);
+      lines.push('Ports now: '+(r.ports_now||[]).join(', '));
+      lines.push('Version replies (5x): '+(r.versions||[]).map(function(v,i){return '['+i+']'+v}).join(' | '));
+      lines.push('Moves written: '+r.write_count+'/4');
+      if(r.move_errors && r.move_errors.length) lines.push('Move errors: '+r.move_errors.join('; '));
+      if(!r.ok){
+        var empties = (r.versions||[]).filter(function(v){return v==='(empty)'||v.indexOf('ERR')===0}).length;
+        if(empties>=3) lines.push('>> Most versions empty/err: baud rate mismatch. Press Probe baud.');
+        else if(empties>0) lines.push('>> Intermittent replies: unstable USB/cable/power. Try different USB port (prefer 2.0 on motherboard, not hub).');
+        if(!r.open) lines.push('>> Port not open: another app holds it, or device disconnected.');
+      }
+      out(lines.join('\\n'));
     });
   };
   $('b_soft').onclick=$('b_test_soft').onclick=function(){
