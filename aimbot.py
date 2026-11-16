@@ -203,10 +203,21 @@ class _CaptureWrapper:
     def __init__(self, capture_obj):
         self._cap = capture_obj
         self._lock = threading.Lock()  # aim loop + debug endpoint share the grabber
+        self._prev = {}
 
     def read(self):
         with self._lock:
             return self._cap.capture_screen()
+
+    def read_new(self, who: str):
+        """(frame, is_new). The aim loops must act once per NEW frame: the screen shows the
+        effect of a correction only on a later frame, so acting again on identical pixels stacks
+        corrections and overshoots (the speeds are tuned for a loop paced by real frames)."""
+        f = self.read()
+        p = self._prev.get(who)
+        new = p is None or (f is not p and (f.shape != p.shape or not np.array_equal(f, p)))
+        self._prev[who] = f
+        return f, new
 
     def close(self):
         self._cap.close()
@@ -484,7 +495,21 @@ class aimbot:
         for r in rows:
             mix[r[1]] = mix.get(r[1], 0) + 1
         last = rows[-1] if rows else None
+        mv = [r for r in rows if r[1] == "move"]
+        flips = 0                                   # raw offset changing sign = overshoot
+        for a, b in zip(mv, mv[1:]):
+            for i in (3, 4):
+                if abs(a[i]) >= 2 and abs(b[i]) >= 2 and (a[i] > 0) != (b[i] > 0):
+                    flips += 1
+        off0 = off1 = 0
+        stuck = False                               # moves sent but the offset does not shrink
+        if len(mv) >= 15:
+            th = len(mv) // 3
+            off0 = sum(math.hypot(r[3], r[4]) for r in mv[:th]) / th
+            off1 = sum(math.hypot(r[3], r[4]) for r in mv[-th:]) / th
+            stuck = off1 >= 0.8 * off0 and off1 >= 6 and flips < 6
         return {
+            "flips": flips, "stuck": stuck, "off0": int(round(off0)), "off1": int(round(off1)),
             "calls": len(rows),
             "rate": round(len(rows) / window, 1),
             "reasons": mix,
@@ -501,8 +526,8 @@ class aimbot:
         if cfg:
             self.cfg = cfg
 
-        frame = self.capture.read()
-        if frame is None:
+        frame, fresh = self.capture.read_new("trigger")
+        if frame is None or not fresh:
             return
 
         ts = time.perf_counter()
@@ -618,8 +643,8 @@ class aimbot:
             self._st_magnet.decay_idle(0.3)
             return
 
-        frame = self.capture.read()
-        if frame is None:
+        frame, fresh = self.capture.read_new("magnet")
+        if frame is None or not fresh:
             return
 
         H, W = frame.shape[0], frame.shape[1]

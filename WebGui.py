@@ -266,6 +266,9 @@ _JS = r"""
     else if(cp0.src==='screen'&&cp0.reason){m='Game window is not tracked: '+cp0.reason+'. The capture box sits on the screen center, not on the crosshair.';c='bad'}
     else if(!tr||!tr.calls){m='Aim is not sampling: mode "'+d.aim_mode+'" needs its key (see Keys tab), or capture has not started.';c='bad'}
     else if(mv>0&&i.mode==='makcu'&&!i.makcu_found){m='Makcu not found: moves are going through SendInput fallback.';c='ok'}
+    else if(mv>0&&i.mode!=='makcu'){m='Input mode is SendInput: Vanguard ignores it inside Valorant. Switch to Makcu.';c='bad'}
+    else if(mv>=15&&tr.stuck){m='Aim sends moves but the offset to the target is not shrinking ('+tr.off0+' px -> '+tr.off1+' px): the game is not receiving them, or the capture center is not on the crosshair (see Capture center).';c='bad'}
+    else if(mv>=8&&tr.flips>=6){m='Aim overshoots: the offset flips sign '+tr.flips+' times in 5 s. Raise Speed X / Y (bigger = slower).';c='bad'}
     else if(mv>0){m='OK: aim sent '+tr.sent[0]+' / '+tr.sent[1]+' px in 5 s ('+mv+' move samples).';c='ok'}
     else if(dz>=np&&dz>=sp&&dz>0){m='Target is inside the dead zone: lower Dead X / Dead Y.';c='bad'}
     else if(sp>np){m='Moves round down to 0: Speed is too high (smaller = faster).';c='bad'}
