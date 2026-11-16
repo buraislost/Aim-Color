@@ -257,11 +257,13 @@ _JS = r"""
   }
   function diag(d){
     var t=d.detect||{},l=d.loop||{},i=d.input||{},tr=d.trace,mix=(tr&&tr.reasons)||{},m,c='ok';
+    var cp0=d.capture||{};
     var w=d.wide;if(w&&(w.err||!w.t||(Date.now()/1000-w.t)>3))w=null;
     var mv=mix.move||0,np=mix.no_pixels||0,dz=(mix['deadzone']||0)+(mix['deadzone(locked)']||0),sp=mix.subpixel||0;
     if(l.err){m='Loop error: '+l.err;c='bad'}
     else if(t.err){m='Capture error: '+t.err;c='bad'}
     else if(t.mean!=null&&t.mean<1){m='Capture is black ('+((d.capture&&d.capture.backend)||'?')+'): the game is not being grabbed. Try the other backend (DXGI / GDI buttons) or check display mode / monitor.';c='bad'}
+    else if(cp0.src==='screen'&&cp0.reason){m='Game window is not tracked: '+cp0.reason+'. The capture box sits on the screen center, not on the crosshair.';c='bad'}
     else if(!tr||!tr.calls){m='Aim is not sampling: mode "'+d.aim_mode+'" needs its key (see Keys tab), or capture has not started.';c='bad'}
     else if(mv>0&&i.mode==='makcu'&&!i.makcu_found){m='Makcu not found: moves are going through SendInput fallback.';c='ok'}
     else if(mv>0){m='OK: aim sent '+tr.sent[0]+' / '+tr.sent[1]+' px in 5 s ('+mv+' move samples).';c='ok'}
@@ -281,7 +283,7 @@ _JS = r"""
       set('d_off',t.dx!=null?t.dx+', '+t.dy:null);
       set('d_frame',t.frame?t.frame.join('x')+' (screen '+d.screen.join('x')+')':null);
       var cp=d.capture||{};
-      set('d_cap',cp.center?cp.center.join(', ')+' ('+cp.src+(cp.src==='screen'?': window "'+cp.win+'" not found':'')+') ['+(cp.backend||'?')+(cp.err_streak?' err='+cp.err_streak:'')+']':null);
+      set('d_cap',cp.center?cp.center.join(', ')+' ('+cp.src+(cp.src==='screen'?': '+(cp.reason||('window "'+cp.win+'" not found')):(cp.found&&cp.found.title?': "'+cp.found.title.trim()+'" '+(cp.found.size||[]).join('x'):''))+') ['+(cp.backend||'?')+(cp.err_streak?' err='+cp.err_streak:'')+']':null);
       set('d_mean',t.mean);
       var wd=d.wide,fresh=wd&&!wd.err&&wd.t&&(Date.now()/1000-wd.t)<3;
       set('d_wide',fresh?(wd['in']+' px in FOV, '+wd.out+' px outside'+(wd.need?' (nearest '+wd.dx+', '+wd.dy+')':'')):(wd&&wd.err)||null);
@@ -352,6 +354,25 @@ _JS = r"""
   }
   if($('b_cap_dxgi').onclick!==undefined){$('b_cap_dxgi').onclick=function(){_swCap('dxgi')};}
   if($('b_cap_gdi').onclick!==undefined){$('b_cap_gdi').onclick=function(){_swCap('gdi')};}
+  function _loadWins(){
+    post('/api/capture/windows').then(function(r){
+      var sel=$('d_win');sel.innerHTML='';
+      (r.windows||[]).forEach(function(w){
+        var o=document.createElement('option');o.value=(w.title||'').trim();
+        o.textContent=(w.title.trim()||'(no title)')+'  ['+w.cls+']  '+w.w+'x'+w.h+' @'+w.x+','+w.y;
+        if(o.value&&o.value===r.current)o.selected=true;
+        sel.appendChild(o);
+      });
+      out(r.ok?((r.windows||[]).length+' windows. Pick the game window and press Use (Auto = VALORANT).'):('List failed: '+r.err));
+    }).catch(function(e){out('Request failed: '+e)});
+  }
+  function _useWin(t){
+    post('/api/capture/window',{title:t}).then(function(r){out('Capture window = "'+t+'". The Capture center row updates in a second.')})
+      .catch(function(e){out('Request failed: '+e)});
+  }
+  $('b_win_list').onclick=_loadWins;
+  $('b_win_use').onclick=function(){var v=$('d_win').value;if(v)_useWin(v);else out('Press Windows first, then pick the game window.')};
+  $('b_win_auto').onclick=function(){_useWin('VALORANT')};
   document.querySelectorAll('.kb').forEach(function(b){
     b.onclick=function(){
       var old=b.textContent;b.textContent='Press a key... (Esc cancels)';b.disabled=true;
@@ -604,6 +625,12 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
                '<button type="button" class="btn2" id="b_soft">Test SendInput</button>'
                '<button type="button" class="btn2" id="b_cap_dxgi">DXGI</button>'
                '<button type="button" class="btn2" id="b_cap_gdi">GDI</button>'
+               '</div>'
+               '<div class="row">'
+               '<select id="d_win" style="flex:1;min-width:0"><option value="">Game window: press Windows</option></select>'
+               '<button type="button" class="btn2" id="b_win_list">Windows</button>'
+               '<button type="button" class="btn2" id="b_win_use">Use</button>'
+               '<button type="button" class="btn2" id="b_win_auto">Auto</button>'
                '</div>'
                '<pre class="out" id="d_out">Output shows here.</pre>')
     )

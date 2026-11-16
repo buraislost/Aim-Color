@@ -20,7 +20,7 @@ from flask import Flask, request, redirect, jsonify, Response
 
 from aimbot import aimbot, load_config, apply_cfg
 from Driver import Mouse
-from Capture import DirectXCapture, DXGICapture, grab_screen_jpg
+from Capture import DirectXCapture, DXGICapture, grab_screen_jpg, center_info, list_game_windows
 from WebGui import get_html, _show_login_form
 from user32 import (vk_name, wait_for_key, get_async_key_state, get_screen_size,
                     get_foreground_window, get_window_text)
@@ -263,6 +263,8 @@ class BuraApp:
                 d["capture"] = {"center": list(c) if c else None,
                                 "src": getattr(self.capture, "center_src", "screen"),
                                 "win": str(self.cfg.get("capture_window", "VALORANT")),
+                                "reason": center_info().get("reason", ""),
+                                "found": {k: center_info().get(k) for k in ("title", "cls", "size", "how")},
                                 "backend": self._cap_backend + (" (forced)" if self._force_gdi else ""),
                                 "err_streak": self._cap_err_streak}
                 d["wide"] = getattr(self.aim, "wide_info", None)
@@ -363,6 +365,22 @@ class BuraApp:
         @self.app.route("/api/soft/test", methods=["POST"])
         def api_soft_test():
             return jsonify(ok=self.mouse.test_soft())
+
+        @self.app.route("/api/capture/windows", methods=["POST"])
+        def api_cap_windows():
+            try:
+                return jsonify(ok=True, windows=list_game_windows(),
+                               current=str(self.cfg.get("capture_window", "VALORANT")))
+            except Exception as e:
+                return jsonify(ok=False, err=f"{type(e).__name__}: {e}", windows=[])
+
+        @self.app.route("/api/capture/window", methods=["POST"])
+        def api_cap_window():
+            b = request.get_json(silent=True) or {}
+            title = str(b.get("title", "VALORANT")).strip()
+            self.cfg["capture_window"] = title
+            apply_cfg(self.cfg)
+            return jsonify(ok=True, title=title)
 
         @self.app.route("/api/capture/backend", methods=["POST"])
         def api_cap_backend():
