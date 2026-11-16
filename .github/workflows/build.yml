@@ -1,8 +1,7 @@
 name: Build Bura EXE
 
 on:
-  push:
-    branches: [bura-python]
+  # auto-build on push paused: running from source (run.bat) until bugs verified
   workflow_dispatch:
 
 permissions:
