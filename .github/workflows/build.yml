@@ -47,8 +47,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/bura-python'
         with:
-          tag_name: bura-v${{ github.run_number }}
+          tag_name: bura-b${{ github.run_number }}
           name: Bura Build ${{ github.run_number }}
+          body: |
+            Auto-built from `bura-python` branch, commit ${{ github.sha }}
           files: dist/Bura.exe
           draft: false
           prerelease: false
