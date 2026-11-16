@@ -13,15 +13,17 @@ import sys
 import webbrowser
 import json
 import socket
+import collections
 from logging.handlers import RotatingFileHandler
 
-from flask import Flask, request, redirect
+from flask import Flask, request, redirect, jsonify, Response
 
 from aimbot import aimbot, load_config, apply_cfg
 from Driver import Mouse
 from Capture import DirectXCapture, DXGICapture
 from WebGui import get_html, _show_login_form
-from user32 import get_async_key_state
+from user32 import (get_async_key_state, get_screen_size,
+                    get_foreground_window, get_window_text)
 
 # ---------- defaults ----------
 
@@ -38,6 +40,7 @@ _DEFAULT_CFG = {
     "deadzone_y": 3,
     "pixel_distance": 5,
     "base_delay": 0.05,
+    "FOV_TRIGGER": 30,
     "magnet_strength": 0.5,
     "magnet_smooth": 3.0,
     "magnet_fov": 50,
@@ -53,6 +56,9 @@ _DEFAULT_CFG = {
     "recoil_duration": 0,
     "recoil_x": 0,
     "recoil_y": 0,
+    "input_mode": "makcu",
+    "makcu_baud": 128000,
+    "makcu_term": "\r",
 }
 
 colors = ["yellow", "red", "purple"]
@@ -62,24 +68,14 @@ magnet_option = ["v1", "v2"]
 
 # ---------- should_fire helpers ----------
 
-_toggle_active = False
-_toggle_prev_key = False
-
-
 def _should_fire(cfg: dict) -> bool:
-    global _toggle_active, _toggle_prev_key
     mode = cfg.get("aim_mode", "hold")
     hotkey = int(cfg.get("trigger_hotkey", 0x14))
     if mode == "always":
         return True
     if mode == "hold":
         return get_async_key_state(hotkey)
-    if mode == "toggle":
-        pressed = get_async_key_state(hotkey)
-        if pressed and not _toggle_prev_key:
-            _toggle_active = not _toggle_active
-        _toggle_prev_key = pressed
-        return _toggle_active
+    # toggle handled in app state
     return False
 
 
@@ -107,15 +103,23 @@ class BuraApp:
         if saved:
             self.cfg.update(saved)
 
-        self.mouse = Mouse()
-        if self.mouse.found:
-            print(f"[Bura] MAKCU found on {self.mouse.port_name}")
-        else:
-            print("[Bura] WARNING: MAKCU not found — mouse moves will do nothing")
+        self.mouse = Mouse(int(self.cfg.get("makcu_baud", 128000)),
+                           self.cfg.get("makcu_term", "\r"))
+        self.mouse.set_mode(self.cfg.get("input_mode", "makcu"))
         self.capture = None
         self.aim = None
-        self._capture_fov = 0  # track current capture FOV to detect changes
         self.running = True
+        self._cam_lock = threading.Lock()
+        self.cap_fov = 0
+        self._toggled = False
+        self._hk_prev = False
+        self.hotkey_down = False
+        self.magnet_down = False
+        self.active = False
+        self.loop_hz = 0.0
+        self.active_hist = collections.deque(maxlen=2000)
+        self.last_err = ""
+        self.last_err_t = 0.0
         self.port = self._get_free_port()
 
         self._setup_routes()
@@ -125,45 +129,41 @@ class BuraApp:
             s.bind(("", 0))
             return s.getsockname()[1]
 
+    def _note_err(self, e):
+        self.last_err = f"{type(e).__name__}: {e}"
+        self.last_err_t = time.time()
+
     def _ensure_camera(self):
-        fov = max(
-            int(self.cfg.get("fovx", 50)),
-            int(self.cfg.get("fovy", 50)),
-            int(self.cfg.get("magnet_fov", 50)),
-        ) * 2
+        with self._cam_lock:
+            need = max(int(self.cfg.get("fovx", 50)),
+                       int(self.cfg.get("fovy", 50)),
+                       int(self.cfg.get("magnet_fov", 50))) * 2
 
-        # Recreate capture if FOV changed
-        if self.capture is not None and fov != self._capture_fov:
-            print(f"[Bura] FOV changed {self._capture_fov} -> {fov}, recreating capture")
-            try:
-                self.capture.close()
-            except Exception:
-                pass
-            self.capture = None
-            self.aim = None
-
-        if self.capture is None:
-            self._capture_fov = fov
-            try:
-                self.capture = DXGICapture(fov=fov)
-                print(f"[Bura] capture: DXGI (bettercam), fov={fov}")
-            except Exception as e1:
-                print(f"[Bura] DXGI failed ({e1}), falling back to GDI")
+            if self.capture is None:
                 try:
-                    self.capture = DirectXCapture(fov=fov)
-                    print(f"[Bura] capture: GDI, fov={fov}")
-                except Exception as e2:
-                    print(f"[Bura] GDI also failed: {e2}")
-                    return
+                    self.capture = DXGICapture(fov=need)
+                except Exception:
+                    self.capture = DirectXCapture(fov=need)
+                self.cap_fov = need
+            elif need > self.cap_fov:
+                # FOV was raised from the GUI after startup — grow the grab region
+                try:
+                    if hasattr(self.capture, "recreate"):
+                        self.capture._fov = need
+                        self.capture.recreate()
+                    else:
+                        self.capture.set_fov(need)
+                    self.cap_fov = need
+                except Exception as e:
+                    self._note_err(e)
 
-        if self.aim is None:
-            self.aim = aimbot(self.mouse, self.capture, self.cfg)
-            print("[Bura] aimbot initialized")
+            if self.aim is None:
+                self.aim = aimbot(self.mouse, self.capture, self.cfg)
 
     def _setup_routes(self):
         @self.app.route("/", methods=["GET"])
         def index():
-            return get_html(self.cfg, colors, aim_modes, magnet_option)
+            return get_html(self.cfg, colors, aim_modes, magnet_option, self.mouse.status())
 
         @self.app.route("/", methods=["POST"])
         def update_config():
@@ -191,6 +191,7 @@ class BuraApp:
                         pass
 
             self.cfg.update(form)
+            self.mouse.set_mode(self.cfg.get("input_mode", "makcu"))
             apply_cfg(self.cfg)
 
             if self.aim:
@@ -198,34 +199,127 @@ class BuraApp:
 
             return redirect("/")
 
+        # ---------- debug API ----------
+        @self.app.route("/api/debug")
+        def api_debug():
+            err = self.last_err if time.time() - self.last_err_t < 5 else ""
+            d = {
+                "screen": list(get_screen_size()),
+                "color": self.cfg.get("color_to_track"),
+                "aim_mode": self.cfg.get("aim_mode"),
+                "input": self.mouse.status(),
+                "loop": {"hz": round(self.loop_hz, 1), "active": bool(self.active),
+                         "hotkey_down": bool(self.hotkey_down),
+                         "magnet_down": bool(self.magnet_down), "err": err,
+                         "active_ratio": round(sum(self.active_hist) / max(1, len(self.active_hist)), 2)},
+            }
+            try:
+                d["fg"] = get_window_text(get_foreground_window())[:60]
+            except Exception:
+                d["fg"] = ""
+            d["trace"] = self.aim.summary(5.0) if self.aim else None
+            try:
+                self._ensure_camera()
+                d["detect"] = self.aim.peek(self.cfg)[0]
+            except Exception as e:
+                d["detect"] = {"err": f"{type(e).__name__}: {e}"}
+            return jsonify(d)
+
+        @self.app.route("/api/debug/frame.png")
+        def api_debug_frame():
+            try:
+                self._ensure_camera()
+                png = self.aim.debug_png(self.cfg)
+            except Exception:
+                png = None
+            if not png:
+                return Response(status=204)
+            return Response(png, mimetype="image/png",
+                            headers={"Cache-Control": "no-store"})
+
+        @self.app.route("/api/debug/hit.png")
+        def api_debug_hit():
+            hit = self.aim.hit if self.aim else None
+            if not hit or not hit.get("png"):
+                return Response(status=204)
+            return Response(hit["png"], mimetype="image/png",
+                            headers={"Cache-Control": "no-store"})
+
+        @self.app.route("/api/makcu/info", methods=["POST"])
+        def api_makcu_info():
+            return jsonify(self.mouse.debug_info())
+
+        @self.app.route("/api/makcu/probe", methods=["POST"])
+        def api_makcu_probe():
+            return jsonify(self.mouse.probe())
+
+        @self.app.route("/api/makcu/test", methods=["POST"])
+        def api_makcu_test():
+            return jsonify(ok=self.mouse.test_makcu())
+
+        @self.app.route("/api/makcu/use", methods=["POST"])
+        def api_makcu_use():
+            b = request.get_json(silent=True) or {}
+            baud = int(b.get("baud", self.mouse.baud))
+            term = b.get("term", self.mouse.term)
+            ok = self.mouse.reconnect(baud, term)
+            self.cfg["makcu_baud"] = baud
+            self.cfg["makcu_term"] = term
+            apply_cfg(self.cfg)
+            return jsonify(ok=bool(ok), baud=baud)
+
+        @self.app.route("/makcu/connect", methods=["POST"])
+        def makcu_connect():
+            self.mouse.reconnect()
+            return redirect("/")
+
         @self.app.route("/login", methods=["POST"])
         def login():
             # KeyAuth bypass — always succeed
             return redirect("/")
 
+    def _aim_active(self) -> bool:
+        mode = self.cfg.get("aim_mode", "hold")
+        down = get_async_key_state(int(self.cfg.get("trigger_hotkey", 0x14)))
+        self.hotkey_down = down
+        if mode == "toggle" and down and not self._hk_prev:
+            self._toggled = not self._toggled
+        self._hk_prev = down
+        if mode == "always":
+            return True
+        if mode == "hold":
+            return down
+        return self._toggled
+
     def _heartbeat_loop(self):
         """Main aim loop — runs in a thread."""
-        _err_count = 0
+        n, t0 = 0, time.perf_counter()
         while self.running:
             try:
                 self._ensure_camera()
 
-                if self.aim is None:
-                    time.sleep(0.1)
-                    continue
-
-                if _should_fire(self.cfg):
+                self.active = self._aim_active()
+                self.active_hist.append(self.active)
+                if self.active:
                     self.aim.trigger(self.cfg)
 
-                if _magnet_should_fire(self.cfg):
+                self.magnet_down = _magnet_should_fire(self.cfg)
+                if self.magnet_down:
                     self.aim.magnet(self.cfg)
 
+                # Spinbot on separate key (optional)
+                # self.aim.spinbot(self.cfg)
+
             except Exception as e:
-                _err_count += 1
-                if _err_count <= 10:
-                    print(f"[Bura] aim loop error #{_err_count}: {e}")
-                elif _err_count == 11:
-                    print("[Bura] suppressing further errors")
+                self._note_err(e)
+                logging.debug(f"aim loop error: {e}")
+                time.sleep(0.05)  # don't spin on a persistent failure
+
+            n += 1
+            now = time.perf_counter()
+            if now - t0 >= 1.0:
+                self.loop_hz = n / (now - t0)
+                n, t0 = 0, now
 
             time.sleep(0.001)  # ~1000 Hz polling
 

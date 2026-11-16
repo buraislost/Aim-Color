@@ -12,6 +12,8 @@ import json
 import os
 import random
 import math
+import threading
+import collections
 
 # ---------- config helpers ----------
 
@@ -57,6 +59,9 @@ COLOR_RANGES = {
     "red": {
         "lower": np.array([0, 120, 120], dtype=np.uint8),
         "upper": np.array([10, 255, 255], dtype=np.uint8),
+        # red wraps around the hue circle — second band at the top end
+        "lower2": np.array([170, 120, 120], dtype=np.uint8),
+        "upper2": np.array([179, 255, 255], dtype=np.uint8),
     },
     "purple": {
         "lower": np.array([125, 50, 50], dtype=np.uint8),
@@ -65,14 +70,106 @@ COLOR_RANGES = {
 }
 
 
+# ---------- mask helpers ----------
+
+def _color_mask(hsv, tag: str, tol: int = 0):
+    """inRange over every band of the color (red has two), tolerance widens each."""
+    cr = COLOR_RANGES.get(tag, COLOR_RANGES["yellow"])
+    bands = [(cr["lower"], cr["upper"])]
+    if "lower2" in cr:
+        bands.append((cr["lower2"], cr["upper2"]))
+    mask = None
+    for lo, hi in bands:
+        lo = lo.astype(int)
+        hi = hi.astype(int)
+        if tol > 0:
+            # Tolerance loosens saturation/value freely, but hue only by a hair:
+            # widening hue by `tol` drags orange doors / brick (H~11) into yellow.
+            ht = min(tol, 2)
+            lo = lo - np.array([ht, tol, tol])
+            hi = hi + np.array([ht, tol, tol])
+        lo = np.clip(lo, 0, 255).astype(np.uint8)
+        hi = np.clip(hi, 0, 255).astype(np.uint8)
+        m = cv2.inRange(hsv, lo, hi)
+        mask = m if mask is None else cv2.bitwise_or(mask, m)
+    return mask
+
+
+_KERNEL = np.ones((5, 5), np.uint8)
+
+
+def _select_blob(mask, min_area: int = 8):
+    """
+    Keep only the color blob closest to the ROI center. Outline fragments are
+    glued with a dilate first; specks and far-away background noise are dropped
+    so they can't drag the head-cluster centroid around.
+    Returns (ys, xs) of the chosen blob's original mask pixels.
+    """
+    ys, xs = np.nonzero(mask)
+    if len(xs) == 0:
+        return ys, xs
+    n, labels, _, cents = cv2.connectedComponentsWithStats(
+        cv2.dilate(mask, _KERNEL), connectivity=8)
+    cnt = np.bincount(labels[ys, xs], minlength=n)      # real mask pixels per blob
+    cnt[0] = 0
+    # drop specks, and anything much smaller than the biggest blob
+    floor = max(min_area, int(cnt.max() * 0.25))
+    rcx, rcy = mask.shape[1] / 2.0, mask.shape[0] / 2.0
+    best, best_d = -1, 1e18
+    for k in range(1, n):
+        if cnt[k] < floor:
+            continue
+        d = (cents[k][0] - rcx) ** 2 + (cents[k][1] - rcy) ** 2
+        if d < best_d:
+            best, best_d = k, d
+    if best < 0:
+        return ys[:0], xs[:0]
+    sel = labels[ys, xs] == best
+    return ys[sel], xs[sel]
+
+
+def _render_png(roi, mask, target=None) -> bytes:
+    """ROI | mask side by side, crosshair + target marker, as PNG bytes."""
+    out = np.hstack([np.ascontiguousarray(roi), cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)])
+    h = out.shape[0]
+    s = max(1, 240 // h) if h <= 240 else 240.0 / h
+    out = cv2.resize(out, None, fx=s, fy=s,
+                     interpolation=cv2.INTER_NEAREST if s >= 1 else cv2.INTER_AREA)
+    w2 = int(roi.shape[1] * s)
+    cx, cy = int(roi.shape[1] // 2 * s), int(roi.shape[0] // 2 * s)
+    for ox in (0, w2):
+        cv2.drawMarker(out, (ox + cx, cy), (255, 255, 255), cv2.MARKER_CROSS, 12, 1)
+        if target:
+            cv2.circle(out, (ox + int(target[0] * s), int(target[1] * s)), 6, (0, 255, 0), 1)
+    ok, buf = cv2.imencode(".png", out)
+    return buf.tobytes() if ok else b""
+
+
+def _roi_mask(frame, cfg: dict):
+    """Crop the FOV box around the frame center and build the color mask."""
+    fh, fw = frame.shape[0], frame.shape[1]
+    cy, cx = fh // 2, fw // 2
+    hx = int(cfg.get("fovx", 50))
+    hy = int(cfg.get("fovy", 50))
+    roi = frame[max(0, cy-hy):min(fh, cy+hy), max(0, cx-hx):min(fw, cx+hx)]
+    if roi.size == 0:
+        return None, None
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    mask = _color_mask(hsv, cfg.get("color_to_track", "yellow"),
+                       int(cfg.get("tolerance", 0)))
+    return roi, mask
+
+
 # ---------- capture wrapper ----------
 
 class _CaptureWrapper:
     def __init__(self, capture_obj):
         self._cap = capture_obj
+        self._lock = threading.Lock()  # aim loop + debug endpoint share the grabber
 
     def read(self):
-        return self._cap.capture_screen()
+        with self._lock:
+            return self._cap.capture_screen()
 
     def close(self):
         self._cap.close()
@@ -89,6 +186,7 @@ class _SmoothState:
         "locked",
         "no_target_frames",
         "rx", "ry",  # sub-pixel residual
+        "why",       # last decision, for the debug trace
     )
 
     def __init__(self):
@@ -101,6 +199,7 @@ class _SmoothState:
         self.no_target_frames = 0
         self.rx = 0.0
         self.ry = 0.0
+        self.why = ""
 
     def decay_idle(self, factor=0.4):
         self.vx *= factor
@@ -117,8 +216,7 @@ class _SmoothState:
 def _smooth_move(st: _SmoothState, dx: float, dy: float,
                  spd_x: float, spd_y: float,
                  dz_x: int, dz_y: int,
-                 smooth: float = 0.4,
-                 humanize: bool = True) -> tuple:
+                 smooth: float = 0.4) -> tuple:
     """
     Smoothing pipeline:
     1. Deadzone hysteresis — inner/outer threshold prevents boundary chatter
@@ -140,11 +238,13 @@ def _smooth_move(st: _SmoothState, dx: float, dy: float,
         if adx < outer_x and ady < outer_y:
             st.decay_idle(0.2)
             st.rx = st.ry = 0.0
+            st.why = "deadzone(locked)"
             return (0, 0)
         st.locked = False
     else:
         if adx < dz_x and ady < dz_y:
             st.reset()
+            st.why = "deadzone"
             return (0, 0)
 
     # ---- acceleration curve (ease-in-out) ----
@@ -157,8 +257,16 @@ def _smooth_move(st: _SmoothState, dx: float, dy: float,
     # close (t<0.15): very slow, mid: fast, far: moderate
     speed_mult = 0.15 + 0.85 * accel
 
-    want_vx = (dx / spd_x) * speed_mult
-    want_vy = (dy / spd_y) * speed_mult
+    # Speeds were tuned for a ~1 kHz loop. The DXGI grab paces the loop to the
+    # capture fps (~60 Hz), which made the pull ~16x slower. Scale by the real
+    # frame time so px/s stays constant, and never step past a quarter of the error.
+    k = max(1.0, min(dt * 1000.0, 16.0))
+    want_vx = (dx / spd_x) * speed_mult * k
+    want_vy = (dy / spd_y) * speed_mult * k
+    cap_x = max(1.0, 0.25 * adx)
+    cap_y = max(1.0, 0.25 * ady)
+    want_vx = max(-cap_x, min(cap_x, want_vx))
+    want_vy = max(-cap_y, min(cap_y, want_vy))
 
     # ---- EMA blend (frame-rate independent) ----
     # alpha scales with dt so behavior is consistent across fps
@@ -170,12 +278,11 @@ def _smooth_move(st: _SmoothState, dx: float, dy: float,
 
     # ---- gaussian micro-noise (human hand tremor) ----
     # scaled to velocity magnitude — still when near target, slight when moving
-    if humanize:
-        vmag = math.hypot(st.vx, st.vy)
-        if vmag > 0.5:
-            noise_scale = min(vmag * 0.06, 0.8)
-            st.vx += random.gauss(0, noise_scale)
-            st.vy += random.gauss(0, noise_scale)
+    vmag = math.hypot(st.vx, st.vy)
+    if vmag > 0.5:
+        noise_scale = min(vmag * 0.06, 0.8)
+        st.vx += random.gauss(0, noise_scale)
+        st.vy += random.gauss(0, noise_scale)
 
     # ---- sub-pixel accumulation ----
     st.rx += st.vx
@@ -186,6 +293,7 @@ def _smooth_move(st: _SmoothState, dx: float, dy: float,
     st.rx -= ix
     st.ry -= iy
 
+    st.why = "move" if (ix or iy) else "subpixel"
     return (ix, iy)
 
 
@@ -244,8 +352,70 @@ class aimbot:
 
         self._recoil_start = 0.0
         self._firing = False
-        self._tb_armed = False
-        self._tb_fire_at = 0.0
+
+        self.n_moves = 0
+        self.dbg = {}
+        self.log = collections.deque(maxlen=800)   # (t, why, px, dx, dy, mx, my)
+        self.hit = None                            # last frame that had the color
+        self._hit_t = 0.0
+
+    # ---------- debug (never moves the mouse) ----------
+    def peek(self, cfg: dict = None):
+        """Detection snapshot for the WebGUI debug tab. Returns (info, roi, mask)."""
+        cfg = cfg or self.cfg
+        frame = self.capture.read()
+        if frame is None:
+            return {"err": "capture returned None"}, None, None
+        fh, fw = frame.shape[0], frame.shape[1]
+        info = {
+            "frame": [int(fw), int(fh)],
+            "mean": round(float(frame[::8, ::8].mean()), 2),
+            "px": 0, "target": None, "dx": None, "dy": None,
+            "moves": self.n_moves,
+            "last_move": [self.dbg.get("mx"), self.dbg.get("my")],
+        }
+        roi, mask = _roi_mask(frame, cfg)
+        if roi is None:
+            info["err"] = "FOV box is empty"
+            return info, None, None
+        info["mask_px"] = int(np.count_nonzero(mask))
+        ys, xs = _select_blob(mask, int(cfg.get("min_blob", 8)))
+        rcx, rcy = roi.shape[1] // 2, roi.shape[0] // 2
+        info["roi"] = [int(roi.shape[1]), int(roi.shape[0])]
+        info["px"] = int(len(xs))
+        if len(xs):
+            tx, ty, _ = _pick_target(xs, ys, rcx, rcy, 0.0, 0.0, False)
+            ty += int(cfg.get("offset", 0))
+            info["target"] = [round(tx, 1), round(ty, 1)]
+            info["dx"] = round(tx - rcx, 1)
+            info["dy"] = round(ty - rcy, 1)
+        return info, roi, mask
+
+    def debug_png(self, cfg: dict = None):
+        info, roi, mask = self.peek(cfg)
+        if roi is None:
+            return None
+        return _render_png(roi, mask, info.get("target"))
+
+    def summary(self, window: float = 5.0) -> dict:
+        """What the aim loop actually decided in the last `window` seconds."""
+        now = time.perf_counter()
+        rows = [r for r in list(self.log) if now - r[0] <= window]
+        mix = {}
+        for r in rows:
+            mix[r[1]] = mix.get(r[1], 0) + 1
+        last = rows[-1] if rows else None
+        return {
+            "calls": len(rows),
+            "rate": round(len(rows) / window, 1),
+            "reasons": mix,
+            "last": ({"why": last[1], "px": last[2], "dx": last[3], "dy": last[4],
+                      "mx": last[5], "my": last[6], "age": round(now - last[0], 2)}
+                     if last else None),
+            "sent": [sum(abs(r[5]) for r in rows), sum(abs(r[6]) for r in rows)],
+            "hit_t": self.hit["t"] if self.hit else None,
+            "hit_age": round(time.time() - self.hit["t"], 1) if self.hit else None,
+        }
 
     # ---------- trigger (main aimbot) ----------
     def trigger(self, cfg: dict = None):
@@ -256,35 +426,19 @@ class aimbot:
         if frame is None:
             return
 
-        tag = self.cfg.get("color_to_track", "yellow")
-        tol = int(self.cfg.get("tolerance", 0))
-        cr = COLOR_RANGES.get(tag, COLOR_RANGES["yellow"])
-        lo, hi = cr["lower"].copy(), cr["upper"].copy()
-
-        if tol > 0:
-            lo = np.clip(lo.astype(int) - tol, 0, 255).astype(np.uint8)
-            hi = np.clip(hi.astype(int) + tol, 0, 255).astype(np.uint8)
-
-        fh, fw = frame.shape[0], frame.shape[1]
-        cy, cx = fh // 2, fw // 2
-        hx = int(self.cfg.get("fovx", 50))
-        hy = int(self.cfg.get("fovy", 50))
-
-        roi = frame[max(0, cy-hy):min(fh, cy+hy), max(0, cx-hx):min(fw, cx+hx)]
-        if roi.size == 0:
+        ts = time.perf_counter()
+        roi, mask = _roi_mask(frame, self.cfg)
+        if roi is None:
             return
-
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, lo, hi)
-        ys, xs = np.nonzero(mask)
+        ys, xs = _select_blob(mask, int(self.cfg.get("min_blob", 8)))
 
         rcx, rcy = roi.shape[1] // 2, roi.shape[0] // 2
 
         if len(xs) == 0:
+            self.log.append((ts, "no_pixels", 0, 0.0, 0.0, 0, 0))
             self._st_trigger.no_target_frames += 1
             if self._st_trigger.no_target_frames > 5:
                 self._has_prev = False
-            self._tb_armed = False
             self._st_trigger.decay_idle(0.4)
             return
 
@@ -293,6 +447,10 @@ class aimbot:
         tx, ty, found = _pick_target(xs, ys, rcx, rcy, self._prev_tx, self._prev_ty, self._has_prev)
         self._prev_tx, self._prev_ty = tx, ty
         self._has_prev = found
+
+        if ts - self._hit_t > 0.4:
+            self._hit_t = ts
+            self.hit = {"t": time.time(), "png": _render_png(roi, mask, (tx, ty))}
 
         offset = int(self.cfg.get("offset", 0))
         ty += offset
@@ -309,18 +467,22 @@ class aimbot:
         if self.cfg.get("legitmode", False):
             sm = 0.22
 
-        hum = bool(self.cfg.get("humanize", True))
-        mx, my = _smooth_move(self._st_trigger, raw_dx, raw_dy, sx, sy, dzx, dzy, smooth=sm, humanize=hum)
+        mx, my = _smooth_move(self._st_trigger, raw_dx, raw_dy, sx, sy, dzx, dzy, smooth=sm)
 
         if self.cfg.get("anti_strafe", False):
-            mx = int(mx * 0.65)
+            # ceil so a 1px step isn't truncated to 0 (x would never move at low speed)
+            mx = int(math.copysign(math.ceil(abs(mx) * 0.65), mx))
 
         if self.cfg.get("legitmode", False) and (abs(mx) > 5 or abs(my) > 5):
             mx = int(math.copysign(5 + math.log1p(abs(mx) - 5), mx)) if abs(mx) > 5 else mx
             my = int(math.copysign(5 + math.log1p(abs(my) - 5), my)) if abs(my) > 5 else my
 
+        self.dbg = {"mx": int(mx), "my": int(my)}
+        self.log.append((ts, self._st_trigger.why, int(len(xs)), round(raw_dx, 1),
+                         round(raw_dy, 1), int(mx), int(my)))
         if mx != 0 or my != 0:
             self.mouse.move(mx, my)
+            self.n_moves += 1
 
         # Recoil
         if self.cfg.get("recoil_auto", False):
@@ -337,23 +499,14 @@ class aimbot:
                 else:
                     self._firing = False
 
-        # Triggerbot (non-blocking)
+        # Triggerbot
         if self.cfg.get("magnet_triggerbot", False):
             pd = int(self.cfg.get("pixel_distance", 5))
             if abs(raw_dx) < pd and abs(raw_dy) < pd:
-                now = time.perf_counter()
-                if not self._tb_armed:
-                    d = float(self.cfg.get("base_delay", 0.05))
-                    d += random.gauss(0, d * 0.1)
-                    self._tb_fire_at = now + max(0.01, d)
-                    self._tb_armed = True
-                elif now >= self._tb_fire_at:
-                    self.mouse.click()
-                    self._tb_armed = False
-            else:
-                self._tb_armed = False
-
-        # Config is pushed from Flask route, no per-frame disk read
+                d = float(self.cfg.get("base_delay", 0.05))
+                d += random.gauss(0, d * 0.1)
+                time.sleep(max(0.01, d))
+                self.mouse.click()
 
     # ---------- spinbot ----------
     def spinbot(self, cfg: dict = None):
@@ -369,7 +522,7 @@ class aimbot:
         cr = COLOR_RANGES.get(tag, COLOR_RANGES["yellow"])
 
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, cr["lower"], cr["upper"])
+        mask = _color_mask(hsv, tag)
         ys, xs = np.nonzero(mask)
         if len(xs) > 0:
             dx = int(np.mean(xs)) - cx
@@ -380,7 +533,11 @@ class aimbot:
         if cfg:
             self.cfg = cfg
 
-        # Key check already done by _magnet_should_fire() in Main.py
+        key = int(self.cfg.get("magnet_key", 0x02))
+        rs = ctypes.windll.user32.GetAsyncKeyState(key)
+        if not (rs & 0x8000):
+            self._st_magnet.decay_idle(0.3)
+            return
 
         frame = self.capture.read()
         if frame is None:
@@ -398,7 +555,7 @@ class aimbot:
         cr = COLOR_RANGES.get(tag, COLOR_RANGES["yellow"])
 
         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, cr["lower"], cr["upper"])
+        mask = _color_mask(hsv, tag)
         ys, xs = np.nonzero(mask)
 
         if len(xs) == 0:

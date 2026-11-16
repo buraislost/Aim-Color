@@ -7,6 +7,13 @@ import ctypes
 from ctypes import wintypes, c_void_p, byref, windll
 import numpy as np
 
+# Without this, GetSystemMetrics returns scaled (virtual) sizes at 125%/150%
+# display scaling and the capture region lands off-center.
+try:
+    windll.user32.SetProcessDPIAware()
+except Exception:
+    pass
+
 
 class DirectXCapture:
     """
@@ -119,7 +126,7 @@ class DXGICapture:
         import bettercam
         self._fov = fov
         self._cam = bettercam.create(output_color="BGR")
-        self._cam.start(region=self._get_region(), video_mode=True)
+        self._cam.start(region=self._get_region(), video_mode=True, target_fps=240)
 
     def _get_region(self):
         user32 = windll.user32
@@ -132,7 +139,7 @@ class DXGICapture:
     def set_fov(self, fov: int):
         self._fov = fov
         self._cam.stop()
-        self._cam.start(region=self._get_region(), video_mode=True)
+        self._cam.start(region=self._get_region(), video_mode=True, target_fps=240)
 
     def capture_screen(self) -> np.ndarray:
         frame = self._cam.get_latest_frame()

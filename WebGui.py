@@ -1,98 +1,511 @@
 """
 WebGui.py — Flask WebGUI HTML template
-Compact tabbed config panel — Bura
+Tabbed config panel — Bura
+"""
+
+_CSS = """
+:root{
+  --bg:#0b0b10;--panel:#12121a;--card:#171722;--card2:#1c1c2a;
+  --line:#262636;--line2:#31314a;
+  --tx:#e8e8f2;--tx2:#9a9ab4;--tx3:#5f5f7a;
+  --ac:#7c5cfc;--ac2:#a48bff;--acg:rgba(124,92,252,.28);
+  --r:12px;--r2:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{color-scheme:dark}
+body{
+  background:radial-gradient(900px 420px at 50% -120px,rgba(124,92,252,.16),transparent 70%),var(--bg);
+  color:var(--tx);font:13px/1.45 Inter,"Segoe UI",system-ui,sans-serif;
+  min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:20px 12px;
+  -webkit-font-smoothing:antialiased
+}
+.wrap{width:100%;max-width:440px}
+
+/* header */
+.hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.brand{display:flex;align-items:center;gap:9px}
+.logo{
+  width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--ac),#5b3fe0);color:#fff;font-weight:800;font-size:16px;
+  box-shadow:0 6px 18px var(--acg)
+}
+.hd h1{font-size:17px;font-weight:700;letter-spacing:.2px;line-height:1.1}
+.hd small{display:block;font-size:11px;color:var(--tx3);margin-top:2px}
+.badge{
+  display:flex;align-items:center;gap:7px;font-size:11px;color:var(--tx2);
+  background:var(--panel);border:1px solid var(--line);padding:4px 11px;border-radius:99px
+}
+.badge i{width:7px;height:7px;border-radius:50%;background:#3ddc97;box-shadow:0 0 8px #3ddc97}
+
+/* tabs */
+.tabs{
+  display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:4px;margin-bottom:14px;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--r)
+}
+.tabs button{
+  background:none;border:none;color:var(--tx3);font:600 12px inherit;font-family:inherit;
+  padding:8px 0;border-radius:var(--r2);cursor:pointer;transition:.15s
+}
+.tabs button:hover{color:var(--tx2);background:rgba(255,255,255,.03)}
+.tabs button.on{color:#fff;background:var(--ac);box-shadow:0 4px 14px var(--acg)}
+.tabs button:focus-visible,.btn:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+
+/* panels + cards */
+.pn{display:none}
+.pn.on{display:flex;flex-direction:column;gap:8px;animation:in .18s ease}
+@keyframes in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+.ct{
+  font-size:9.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+  color:var(--tx3);margin-bottom:8px
+}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px 20px}
+.card{display:flex;flex-direction:column;gap:18px}
+.card > * + *{padding-top:16px;border-top:1px solid var(--line)}
+.card > .tl{padding-top:16px}
+.g3{grid-template-columns:repeat(3,1fr);gap:14px}
+.g3 .v{min-width:0;padding:0 4px}
+
+/* slider */
+.s{display:flex;flex-direction:column;gap:6px;min-width:0}
+.sl{display:flex;justify-content:space-between;align-items:baseline}
+.l{font-size:12px;color:var(--tx2)}
+.v{
+  font-size:12px;font-weight:700;color:var(--ac2);font-variant-numeric:tabular-nums;
+  background:rgba(124,92,252,.12);padding:1px 8px;border-radius:6px;min-width:34px;text-align:center
+}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;outline:none;cursor:pointer;
+  --p:50%
+}
+input[type=range]::-webkit-slider-runnable-track{
+  height:4px;border-radius:4px;
+  background:linear-gradient(90deg,var(--ac) var(--p),var(--line2) var(--p))
+}
+input[type=range]::-moz-range-track{height:4px;border-radius:4px;background:var(--line2)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:4px;background:var(--ac)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;margin-top:-6px;border-radius:50%;
+  background:#fff;border:3px solid var(--ac);box-shadow:0 2px 8px rgba(0,0,0,.5);transition:.12s
+}
+input[type=range]::-moz-range-thumb{
+  width:10px;height:10px;border-radius:50%;background:#fff;border:3px solid var(--ac)
+}
+input[type=range]:hover::-webkit-slider-thumb{box-shadow:0 0 0 5px var(--acg)}
+input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 5px var(--acg)}
+
+/* select */
+select{
+  width:100%;padding:9px 30px 9px 12px;background:var(--card2);color:var(--tx);
+  border:1px solid var(--line2);border-radius:var(--r2);font:inherit;outline:none;cursor:pointer;
+  -webkit-appearance:none;appearance:none;transition:.15s;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239a9ab4' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center
+}
+select:hover{border-color:var(--tx3)}
+select:focus{border-color:var(--ac);box-shadow:0 0 0 3px var(--acg)}
+select option{background:var(--card2)}
+
+/* toggle rows */
+.tl{display:flex;gap:10px}
+.t{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:var(--card2);border:1px solid var(--line);border-radius:var(--r2)}
+.t .l{color:var(--tx);font-size:12px;white-space:nowrap}
+.sw{position:relative;width:36px;height:20px;flex-shrink:0;display:block}
+.sw input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:1}
+.dot{position:absolute;inset:0;background:var(--line2);border-radius:20px;transition:.2s}
+.dot::before{
+  content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;
+  background:#8a8aa6;border-radius:50%;transition:.2s
+}
+.sw input:checked + .dot{background:var(--ac)}
+.sw input:checked + .dot::before{transform:translateX(16px);background:#fff}
+.sw input:focus-visible + .dot{box-shadow:0 0 0 3px var(--acg)}
+
+/* input source picker */
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.opt{position:relative;display:block;cursor:pointer}
+.opt input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;z-index:1}
+.ob{
+  height:100%;display:flex;flex-direction:column;gap:5px;padding:14px;
+  background:var(--card2);border:1.5px solid var(--line2);border-radius:var(--r);transition:.15s
+}
+.opt:hover .ob{border-color:var(--tx3)}
+.opt input:checked + .ob{border-color:var(--ac);background:rgba(124,92,252,.1);box-shadow:0 0 0 3px var(--acg)}
+.opt input:focus-visible + .ob{outline:2px solid var(--ac2);outline-offset:2px}
+.ob b{font-size:14px;color:var(--tx)}
+.ob small{font-size:11px;color:var(--tx3);line-height:1.4}
+.st{
+  margin-top:auto;padding-top:6px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px;color:var(--tx3)
+}
+.st::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--tx3)}
+.st.ok{color:#3ddc97}.st.ok::before{background:#3ddc97;box-shadow:0 0 8px #3ddc97}
+.st.no{color:#ff7a7a}.st.no::before{background:#ff7a7a}
+.btn2{
+  width:100%;padding:10px;border-radius:var(--r2);cursor:pointer;font:600 12px inherit;font-family:inherit;
+  background:transparent;color:var(--ac2);border:1px solid var(--ac);transition:.15s
+}
+.btn2:hover{background:rgba(124,92,252,.14)}
+.hint{font-size:11px;color:var(--tx3);line-height:1.5}
+
+/* debug tab */
+.card.dbg > * + *{padding-top:0;border-top:none}
+.shot{background:#000;border-radius:var(--r2);min-height:130px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.shot img{width:100%;max-height:260px;object-fit:contain;image-rendering:pixelated;display:block}
+.shot img:not([src]){display:none}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;font-size:12px}
+.kv span:nth-child(odd){color:var(--tx3)}
+.kv span:nth-child(even){color:var(--tx);text-align:right;font-variant-numeric:tabular-nums;word-break:break-all}
+.diag{padding:10px 12px;border-radius:var(--r2);font-size:12px;font-weight:600;background:var(--card2);border:1px solid var(--line2);color:var(--tx2)}
+.diag.ok{color:#3ddc97;border-color:rgba(61,220,151,.45)}
+.diag.bad{color:#ff9a7a;border-color:rgba(255,122,122,.45)}
+.row{display:flex;gap:8px}.row .btn2{flex:1}
+pre.out{
+  font:11px/1.5 ui-monospace,Consolas,monospace;color:var(--tx2);white-space:pre-wrap;word-break:break-all;
+  background:var(--card2);border:1px solid var(--line);border-radius:var(--r2);padding:10px;max-height:220px;overflow:auto
+}
+.pr{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0}
+.pr button{
+  background:var(--ac);color:#fff;border:none;border-radius:6px;padding:3px 12px;font:600 11px inherit;font-family:inherit;cursor:pointer
+}
+
+/* apply bar */
+.ab{
+  margin-top:14px
+}
+.btn{
+  width:100%;padding:12px;border:none;border-radius:var(--r);cursor:pointer;
+  background:linear-gradient(135deg,var(--ac),#5b3fe0);color:#fff;font:700 13px inherit;font-family:inherit;
+  letter-spacing:.3px;box-shadow:0 8px 22px var(--acg);transition:.15s
+}
+.btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn:active{transform:none}
+
+@media (max-width:380px){.g2{grid-template-columns:1fr}}
+"""
+
+_JS = r"""
+(function(){
+  var tabs=document.getElementById('tabs'),KEY='bura_tab';
+  function show(t){
+    var b=tabs.querySelector('[data-t="'+t+'"]'),p=document.getElementById('p-'+t);
+    if(!b||!p)return false;
+    document.querySelectorAll('.tabs button').forEach(function(x){x.classList.remove('on')});
+    document.querySelectorAll('.pn').forEach(function(x){x.classList.remove('on')});
+    b.classList.add('on');p.classList.add('on');
+    try{localStorage.setItem(KEY,t)}catch(e){}
+    return true;
+  }
+  tabs.addEventListener('click',function(e){
+    var b=e.target.closest('button');
+    if(b&&b.dataset.t)show(b.dataset.t);
+  });
+  try{var s=localStorage.getItem(KEY);if(s)show(s)}catch(e){}
+
+  // ---- debug tab: live polling only while the tab is open ----
+  var panel=document.getElementById('p-dbg'),busy=false;
+  function $(i){return document.getElementById(i)}
+  function set(id,v){$(id).textContent=(v===null||v===undefined||v==='')?'—':v}
+  function lbl(t){return String(t).replace(/\r/g,'\\r').replace(/\n/g,'\\n')}
+  function out(t){$('d_out').textContent=t}
+  function post(u,b){
+    return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}).then(function(r){return r.json()});
+  }
+  function diag(d){
+    var t=d.detect||{},l=d.loop||{},i=d.input||{},tr=d.trace,mix=(tr&&tr.reasons)||{},m,c='ok';
+    var mv=mix.move||0,np=mix.no_pixels||0,dz=(mix['deadzone']||0)+(mix['deadzone(locked)']||0),sp=mix.subpixel||0;
+    if(l.err){m='Loop error: '+l.err;c='bad'}
+    else if(t.err){m='Capture error: '+t.err;c='bad'}
+    else if(t.mean!=null&&t.mean<1){m='Capture is black: the game is not being grabbed (check display mode / monitor)';c='bad'}
+    else if(!tr||!tr.calls){m='Aim is not sampling: mode "'+d.aim_mode+'" needs the hotkey (Caps Lock), or capture has not started.';c='bad'}
+    else if(mv>0&&i.mode==='makcu'&&!i.makcu_found){m='Aim computes moves but Makcu is not connected (see Makcu below).';c='bad'}
+    else if(mv>0){m='OK: aim sent '+tr.sent[0]+' / '+tr.sent[1]+' px in 5 s ('+mv+' move samples).';c='ok'}
+    else if(dz>=np&&dz>=sp&&dz>0){m='Target is inside the dead zone: lower Dead X / Dead Y.';c='bad'}
+    else if(sp>np){m='Moves round down to 0: Speed is too high (smaller = faster).';c='bad'}
+    else{m='No color blob in the FOV box during the last 5 s. This preview shows what is under the crosshair NOW (including this window). See "last frame with color" below.';c='bad'}
+    $('d_diag').textContent=m;$('d_diag').className='diag '+c;
+  }
+  function poll(){
+    if(busy)return;busy=true;
+    fetch('/api/debug').then(function(r){return r.json()}).then(function(d){
+      var t=d.detect||{},l=d.loop||{},i=d.input||{};
+      set('d_color',d.color);set('d_px',t.px);
+      set('d_tgt',t.target?t.target.join(', '):null);
+      set('d_off',t.dx!=null?t.dx+', '+t.dy:null);
+      set('d_frame',t.frame?t.frame.join('x')+' (screen '+d.screen.join('x')+')':null);
+      set('d_mean',t.mean);
+      set('d_active',l.active?'ON':'OFF');
+      set('d_key',(l.hotkey_down?'down':'up')+' / '+d.aim_mode);
+      set('d_hz',l.hz?l.hz+' Hz':null);
+      set('d_moves',t.moves);
+      set('d_last',t.last_move?t.last_move.join(', '):null);
+      set('d_in',i.mode+(i.mode==='makcu'?(i.makcu_found?' ('+i.makcu_port+' @ '+i.baud+')':' (not found)'):''));
+      var tr=d.trace;
+      set('d_fg',d.fg);
+      set('d_rate',tr?tr.rate+' /s (active '+Math.round((l.active_ratio||0)*100)+'%)':null);
+      set('d_mix',tr&&tr.calls?Object.keys(tr.reasons).map(function(k){return k+' '+tr.reasons[k]}).join(', '):null);
+      set('d_lastS',tr&&tr.last?tr.last.why+' px='+tr.last.px+' d=('+tr.last.dx+', '+tr.last.dy+') mv=('+tr.last.mx+', '+tr.last.my+')':null);
+      set('d_sent',tr?tr.sent.join(', '):null);
+      if(tr&&tr.hit_t&&tr.hit_t!==window._hitT){
+        window._hitT=tr.hit_t;
+        var hi=new Image();hi.onload=function(){$('d_hit').src=hi.src};hi.src='/api/debug/hit.png?'+tr.hit_t;
+      }
+      if(tr&&tr.hit_age!=null)$('d_hitage').textContent='Last frame where the color was seen: '+tr.hit_age+' s ago.';
+      diag(d);
+      // preload, then swap: assigning src directly blanks the image on every poll
+      var im=new Image();im.onload=function(){$('d_img').src=im.src};
+      im.src='/api/debug/frame.png?'+Date.now();
+    }).catch(function(){}).then(function(){busy=false});
+  }
+  setInterval(function(){if(panel.classList.contains('on')&&!document.hidden)poll()},500);
+
+  $('b_info').onclick=function(){
+    out('Querying...');
+    post('/api/makcu/info').then(function(r){
+      var s='Port: '+(r.port||'none')+'\nBaud: '+r.baud+'   Terminator: '+lbl(r.term)+'\nOpen: '+r.open+
+            '\nkm.version() -> '+JSON.stringify(r.version||'')+'\n\nSerial ports (* = known Makcu VID:PID):\n';
+      r.ports.forEach(function(p){s+=(p.match?'* ':'  ')+p.device+'  '+p.hwid+'  '+p.desc+'\n'});
+      if(!r.ports.length)s+='  (none)\n';
+      out(s);
+    }).catch(function(e){out('Request failed: '+e)});
+  };
+  $('b_test').onclick=function(){
+    post('/api/makcu/test').then(function(r){
+      out(r.ok?'Sent a 25px square through the Makcu. The cursor should have moved.':'Makcu port is not open, nothing sent.');
+    });
+  };
+  $('b_probe').onclick=function(){
+    out('Probing baud rates, about 5 s...');
+    post('/api/makcu/probe').then(function(r){
+      var box=$('d_out');box.textContent='';
+      if(!r.port){box.textContent='No port with a known Makcu VID:PID. Press Query to list ports.';return}
+      box.appendChild(document.createTextNode('Port '+r.port+'. Pick a row that got a reply:'));
+      r.results.forEach(function(x){
+        var row=document.createElement('div');row.className='pr';
+        var tx=document.createElement('span');
+        var ok=x.reply&&x.reply.indexOf('ERR')!==0&&x.reply.trim()!=='';
+        tx.textContent=x.baud+' '+lbl(x.term)+'  ->  '+(x.reply?JSON.stringify(x.reply).slice(0,44):'(no reply)');
+        row.appendChild(tx);
+        if(ok){
+          var b=document.createElement('button');b.type='button';b.textContent='Use';
+          b.onclick=function(){
+            post('/api/makcu/use',{baud:x.baud,term:x.term}).then(function(u){
+              out('Switched to '+u.baud+' '+lbl(x.term)+'. Connected: '+u.ok+'. Saved to config.');
+            });
+          };
+          row.appendChild(b);
+        }
+        box.appendChild(row);
+      });
+    });
+  };
+
+  function fill(r){
+    var mn=+r.min,mx=+r.max,p=mx>mn?(r.value-mn)/(mx-mn)*100:0;
+    r.style.setProperty('--p',p+'%');
+  }
+  document.querySelectorAll('input[type=range]').forEach(function(r){
+    fill(r);
+    r.addEventListener('input',function(){
+      document.getElementById('v_'+r.name).textContent=r.value;
+      fill(r);
+    });
+  });
+})();
 """
 
 
 def _show_login_form() -> str:
-    return """
-    <html><body style="background:#111;color:#eee;font-family:system-ui,sans-serif;text-align:center;padding-top:100px">
-    <h2 style="color:#7c5cfc">Bura</h2>
-    <form method="post" action="/login">
-        <input name="key" placeholder="License Key" style="padding:10px;width:280px;background:#1a1a1a;color:#eee;border:1px solid #333;border-radius:6px"><br><br>
-        <button type="submit" style="padding:10px 32px;background:#7c5cfc;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600">Login</button>
-    </form>
-    </body></html>
-    """
+    return """<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bura</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100vh;display:grid;place-items:center;padding:16px;color:#e8e8f2;
+  font:13px/1.45 Inter,"Segoe UI",system-ui,sans-serif;
+  background:radial-gradient(900px 420px at 50% -120px,rgba(124,92,252,.18),transparent 70%),#0b0b10}
+.box{width:100%;max-width:340px;background:#171722;border:1px solid #262636;border-radius:14px;padding:30px 26px;text-align:center}
+.logo{width:44px;height:44px;margin:0 auto 14px;border-radius:12px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#7c5cfc,#5b3fe0);font-weight:800;font-size:20px;color:#fff;box-shadow:0 6px 18px rgba(124,92,252,.28)}
+h2{font-size:18px;margin-bottom:4px}
+p{color:#5f5f7a;font-size:11px;margin-bottom:22px}
+input{width:100%;padding:11px 14px;background:#1c1c2a;color:#e8e8f2;border:1px solid #31314a;border-radius:8px;
+  font:inherit;outline:none;margin-bottom:12px;transition:.15s}
+input:focus{border-color:#7c5cfc;box-shadow:0 0 0 3px rgba(124,92,252,.28)}
+button{width:100%;padding:11px;border:none;border-radius:8px;cursor:pointer;color:#fff;font:700 13px inherit;
+  font-family:inherit;background:linear-gradient(135deg,#7c5cfc,#5b3fe0);transition:.15s}
+button:hover{filter:brightness(1.1)}
+</style></head><body>
+<form class="box" method="post" action="/login">
+  <div class="logo">B</div>
+  <h2>Bura</h2>
+  <p>Enter your license key</p>
+  <input name="key" placeholder="License Key" autocomplete="off" autofocus>
+  <button type="submit">Login</button>
+</form>
+</body></html>"""
 
 
-_VK_NAMES = {
-    0x01: "LMB", 0x02: "RMB", 0x04: "MMB", 0x05: "X1", 0x06: "X2",
-    0x10: "Shift", 0x11: "Ctrl", 0x12: "Alt", 0x14: "CapsLock",
-    0x20: "Space", 0x09: "Tab", 0x1B: "Esc",
-    0x70: "F1", 0x71: "F2", 0x72: "F3", 0x73: "F4", 0x74: "F5",
-    0x75: "F6", 0x76: "F7", 0x77: "F8", 0x78: "F9", 0x79: "F10",
-    0x7A: "F11", 0x7B: "F12",
-}
-
-
-def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list) -> str:
-    """Generate the main config page HTML with compact tabbed layout."""
+def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
+             input_status: dict = None) -> str:
+    """Generate the main config page HTML with card-based tabbed layout."""
 
     def _s(name, label, val, min_v=0, max_v=100, step=1):
-        """Compact inline slider: label [---o---] value"""
-        return f'<div class="s"><span class="l">{label}</span><input type="range" name="{name}" min="{min_v}" max="{max_v}" step="{step}" value="{val}" oninput="this.nextElementSibling.textContent=this.value"><span class="v" id="v_{name}">{val}</span></div>'
+        """Slider: label ........ value / track"""
+        return (
+            f'<div class="s"><div class="sl"><span class="l">{label}</span>'
+            f'<span class="v" id="v_{name}">{val}</span></div>'
+            f'<input type="range" name="{name}" min="{min_v}" max="{max_v}" step="{step}" value="{val}"></div>'
+        )
 
     def _sel(name, label, options, selected):
         opts = "".join(
             f'<option value="{o}" {"selected" if o == selected else ""}>{o}</option>'
             for o in options
         )
-        return f'<div class="s"><span class="l">{label}</span><select name="{name}">{opts}</select></div>'
+        return (
+            f'<div class="s"><span class="l">{label}</span>'
+            f'<select name="{name}">{opts}</select></div>'
+        )
 
     def _t(name, label, checked):
         chk = "checked" if checked else ""
-        return f'<div class="s"><span class="l">{label}</span><label class="sw"><input type="checkbox" name="{name}" {chk}><span class="dot"></span></label></div>'
+        return (
+            f'<div class="t"><span class="l">{label}</span>'
+            f'<label class="sw"><input type="checkbox" name="{name}" {chk}><span class="dot"></span></label></div>'
+        )
 
-    # --- Tab: Aimbot ---
-    aim_hk = int(cfg.get("trigger_hotkey", 0x14))
-    aim_hk_name = _VK_NAMES.get(aim_hk, f"0x{aim_hk:02X}")
-    mag_hk = int(cfg.get("magnet_key", 0x02))
-    mag_hk_name = _VK_NAMES.get(mag_hk, f"0x{mag_hk:02X}")
+    def _card(*rows):
+        return f'<section class="card">{"".join(rows)}</section>'
 
-    tab_aim = "".join([
-        f'<div class="s"><span class="l">Hotkey</span><span class="v" style="flex:1;text-align:left;color:#7c5cfc">{aim_hk_name}</span></div>',
-        _sel("color_to_track", "Color", colors, cfg.get("color_to_track", "yellow")),
-        _sel("aim_mode", "Mode", aim_modes, cfg.get("aim_mode", "hold")),
-        _s("fovx", "FOV X", cfg.get("fovx", 50), 10, 500),
-        _s("fovy", "FOV Y", cfg.get("fovy", 50), 10, 500),
-        _s("speedX", "Speed X", cfg.get("speedX", 3), 1, 30),
-        _s("speedY", "Speed Y", cfg.get("speedY", 3), 1, 30),
-        _s("deadzone_x", "Dead X", cfg.get("deadzone_x", 3), 0, 20),
-        _s("deadzone_y", "Dead Y", cfg.get("deadzone_y", 3), 0, 20),
-        _s("offset", "Y Offset", cfg.get("offset", 0), -50, 50),
-        _s("tolerance", "Tolerance", cfg.get("tolerance", 0), 0, 30),
-        _s("game_sens", "Sensitivity", cfg.get("game_sens", 1.0), 0.1, 5.0, 0.1),
-        '<div class="tg">',
-        _t("anti_strafe", "Anti-Strafe", cfg.get("anti_strafe", False)),
-        _t("humanize", "Humanize", cfg.get("humanize", False)),
-        _t("legitmode", "Legit", cfg.get("legitmode", False)),
-        '</div>',
-    ])
+    def _g2(a, b):
+        return f'<div class="g2">{a}{b}</div>'
+
+    def _g3(a, b, c):
+        return f'<div class="g2 g3">{a}{b}{c}</div>'
+
+    def _chips(*items):
+        return '<div class="tl">' + "".join(items) + '</div>'
+
+    # --- Tab: Aimbot (single card, fits without scrolling) ---
+    tab_aim = _card(
+        _g2(
+            _sel("color_to_track", "Color", colors, cfg.get("color_to_track", "yellow")),
+            _sel("aim_mode", "Mode", aim_modes, cfg.get("aim_mode", "hold")),
+        ),
+        _g2(
+            _s("fovx", "FOV X", cfg.get("fovx", 50), 10, 500),
+            _s("fovy", "FOV Y", cfg.get("fovy", 50), 10, 500),
+        ),
+        _g2(
+            _s("speedX", "Speed X", cfg.get("speedX", 3), 1, 30),
+            _s("speedY", "Speed Y", cfg.get("speedY", 3), 1, 30),
+        ),
+        _g2(
+            _s("deadzone_x", "Dead X", cfg.get("deadzone_x", 3), 0, 20),
+            _s("deadzone_y", "Dead Y", cfg.get("deadzone_y", 3), 0, 20),
+        ),
+        _g3(
+            _s("offset", "Y Offset", cfg.get("offset", 0), -50, 50),
+            _s("tolerance", "Tolerance", cfg.get("tolerance", 0), 0, 30),
+            _s("game_sens", "Sens", cfg.get("game_sens", 1.0), 0.1, 5.0, 0.1),
+        ),
+        _chips(
+            _t("anti_strafe", "Anti-Strafe", cfg.get("anti_strafe", False)),
+            _t("humanize", "Humanize", cfg.get("humanize", False)),
+            _t("legitmode", "Legit", cfg.get("legitmode", False)),
+        ),
+    )
 
     # --- Tab: Triggerbot ---
-    tab_trigger = "".join([
-        _s("pixel_distance", "Distance", cfg.get("pixel_distance", 5), 1, 30),
-        _s("base_delay", "Delay (s)", cfg.get("base_delay", 0.05), 0, 0.5, 0.01),
-        _t("magnet_triggerbot", "Enable", cfg.get("magnet_triggerbot", False)),
-    ])
+    tab_trigger = _card(
+        _g2(
+            _s("pixel_distance", "Distance", cfg.get("pixel_distance", 5), 1, 30),
+            _s("base_delay", "Delay (s)", cfg.get("base_delay", 0.05), 0, 0.5, 0.01),
+        ),
+        _chips(_t("magnet_triggerbot", "Enable", cfg.get("magnet_triggerbot", False))),
+    )
 
     # --- Tab: Magnet ---
-    tab_magnet = "".join([
-        f'<div class="s"><span class="l">Hotkey</span><span class="v" style="flex:1;text-align:left;color:#7c5cfc">{mag_hk_name}</span></div>',
+    tab_magnet = _card(
         _sel("magnet_version", "Mode", magnet_option, cfg.get("magnet_version", "v1")),
-        _s("magnet_strength", "Strength", cfg.get("magnet_strength", 0.5), 0.1, 2.0, 0.1),
-        _s("magnet_smooth", "Smooth", cfg.get("magnet_smooth", 3), 1, 10),
+        _g2(
+            _s("magnet_strength", "Strength", cfg.get("magnet_strength", 0.5), 0.1, 2.0, 0.1),
+            _s("magnet_smooth", "Smooth", cfg.get("magnet_smooth", 3), 1, 10),
+        ),
         _s("magnet_fov", "FOV", cfg.get("magnet_fov", 50), 10, 200),
-    ])
+    )
+
+    # --- Tab: Input (direct mouse vs Makcu) ---
+    st = input_status or {}
+    mode = cfg.get("input_mode", "makcu")
+    if st.get("makcu_found"):
+        mk_state = f'<span class="st ok">Connected · {st.get("makcu_port", "")}</span>'
+    else:
+        mk_state = '<span class="st no">Not found</span>'
+
+    tab_input = _card(
+        '<div class="opts">'
+        f'<label class="opt"><input type="radio" name="input_mode" value="software" {"checked" if mode == "software" else ""}>'
+        '<div class="ob"><b>Input</b><small>Direct mouse input from Windows. No device needed.</small>'
+        '<span class="st ok">Always available</span></div></label>'
+        f'<label class="opt"><input type="radio" name="input_mode" value="makcu" {"checked" if mode == "makcu" else ""}>'
+        f'<div class="ob"><b>Makcu</b><small>Hardware mouse over USB serial.</small>{mk_state}</div></label>'
+        '</div>',
+        '<button type="submit" class="btn2" formaction="/makcu/connect" formmethod="post">Connect Makcu</button>'
+        '<p class="hint">Pick a source, then press Apply. Connect re-scans the COM ports.</p>',
+    )
+
+    # --- Tab: Debug ---
+    tab_debug = (
+        '<section class="card dbg">'
+        '<div class="diag" id="d_diag">Waiting for data...</div>'
+        '<div class="shot"><img id="d_img" alt="FOV box | color mask"></div>'
+        '<div class="kv">'
+        '<span>Color</span><span id="d_color">—</span>'
+        '<span>Pixels in FOV</span><span id="d_px">—</span>'
+        '<span>Target (x, y)</span><span id="d_tgt">—</span>'
+        '<span>Offset (dx, dy)</span><span id="d_off">—</span>'
+        '<span>Frame</span><span id="d_frame">—</span>'
+        '<span>Brightness</span><span id="d_mean">—</span>'
+        '</div></section>'
+        '<section class="card dbg">'
+        '<div class="shot"><img id="d_hit" alt="last frame with color"></div>'
+        '<div class="hint" id="d_hitage">Last frame where the color was seen (kept while you alt-tab back here).</div>'
+        '<div class="kv">'
+        '<span>Foreground</span><span id="d_fg">—</span>'
+        '<span>Aim samples / s</span><span id="d_rate">—</span>'
+        '<span>Result mix (5 s)</span><span id="d_mix">—</span>'
+        '<span>Last sample</span><span id="d_lastS">—</span>'
+        '<span>Sent (|x|, |y| px)</span><span id="d_sent">—</span>'
+        '</div></section>'
+        '<section class="card dbg"><div class="kv">'
+        '<span>Aim</span><span id="d_active">—</span>'
+        '<span>Hotkey / mode</span><span id="d_key">—</span>'
+        '<span>Loop</span><span id="d_hz">—</span>'
+        '<span>Input</span><span id="d_in">—</span>'
+        '<span>Moves sent</span><span id="d_moves">—</span>'
+        '<span>Last move</span><span id="d_last">—</span>'
+        '</div></section>'
+        '<section class="card dbg">'
+        '<div class="row">'
+        '<button type="button" class="btn2" id="b_info">Query</button>'
+        '<button type="button" class="btn2" id="b_probe">Probe baud</button>'
+        '<button type="button" class="btn2" id="b_test">Test move</button>'
+        '</div>'
+        '<pre class="out" id="d_out">Makcu output shows here.</pre>'
+        '</section>'
+    )
 
     # --- Tab: Recoil ---
-    tab_recoil = "".join([
-        _s("recoil_x", "Recoil X", cfg.get("recoil_x", 0), -10, 10),
-        _s("recoil_y", "Recoil Y", cfg.get("recoil_y", 0), -10, 10),
-        _s("recoil_duration", "Duration", cfg.get("recoil_duration", 0), 0, 5, 0.1),
-        _t("recoil_auto", "Auto", cfg.get("recoil_auto", False)),
-    ])
+    tab_recoil = _card(
+        _g3(
+            _s("recoil_x", "X", cfg.get("recoil_x", 0), -10, 10),
+            _s("recoil_y", "Y", cfg.get("recoil_y", 0), -10, 10),
+            _s("recoil_duration", "Duration", cfg.get("recoil_duration", 0), 0, 5, 0.1),
+        ),
+        _chips(_t("recoil_auto", "Auto", cfg.get("recoil_auto", False))),
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -100,74 +513,35 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list) -> s
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bura</title>
-<style>
-*{{margin:0;padding:0;box-sizing:border-box}}
-body{{background:#0d0d0d;color:#bbb;font-family:system-ui,sans-serif;display:flex;justify-content:center;padding:16px 8px}}
-.sh{{width:100%;max-width:360px}}
-.hd{{text-align:center;padding:10px 0 8px}}
-.hd h1{{font-size:16px;color:#fff;letter-spacing:.3px}}
-.hd p{{font-size:9px;color:#444;margin-top:2px}}
-
-.tabs{{display:flex;gap:2px;border-bottom:1px solid #1a1a1a;margin-bottom:10px}}
-.tabs button{{background:none;border:none;color:#555;font-size:11px;font-weight:600;padding:6px 10px;cursor:pointer;border-bottom:2px solid transparent;transition:.15s}}
-.tabs button:hover{{color:#999}}
-.tabs button.on{{color:#7c5cfc;border-bottom-color:#7c5cfc}}
-
-.pn{{display:none}}.pn.on{{display:block}}
-
-/* inline slider row */
-.s{{display:flex;align-items:center;gap:6px;margin-bottom:8px}}
-.s .l{{font-size:10px;color:#777;min-width:58px;flex-shrink:0}}
-.s .v{{font-size:10px;color:#7c5cfc;font-weight:600;min-width:30px;text-align:right}}
-.s input[type=range]{{flex:1;-webkit-appearance:none;height:3px;border-radius:2px;background:#1a1a1a;outline:none}}
-.s input[type=range]::-webkit-slider-thumb{{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#7c5cfc;cursor:pointer}}
-.s input[type=range]::-moz-range-thumb{{width:12px;height:12px;border-radius:50%;background:#7c5cfc;cursor:pointer;border:none}}
-.s select{{flex:1;padding:4px 6px;background:#141414;color:#ccc;border:1px solid #222;border-radius:4px;font-size:11px;outline:none}}
-.s select:focus{{border-color:#7c5cfc}}
-
-/* toggle row group */
-.tg{{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 4px}}
-.tg .s{{margin-bottom:0}}
-
-/* toggle switch */
-.sw{{position:relative;width:30px;height:16px;flex-shrink:0}}
-.sw input{{opacity:0;width:0;height:0}}
-.dot{{position:absolute;cursor:pointer;inset:0;background:#222;border-radius:16px;transition:.2s}}
-.dot::before{{content:'';position:absolute;width:10px;height:10px;left:3px;top:3px;background:#555;border-radius:50%;transition:.2s}}
-.sw input:checked+.dot{{background:#7c5cfc}}
-.sw input:checked+.dot::before{{transform:translateX(14px);background:#fff}}
-
-.ab{{text-align:center;padding:12px 0}}
-.ab button{{background:#7c5cfc;color:#fff;border:none;padding:7px 36px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;transition:.15s}}
-.ab button:hover{{background:#6a4ae0}}
-</style>
+<style>{_CSS}</style>
 </head>
 <body>
-<div class="sh">
-  <div class="hd"><h1>Bura</h1><p>config</p></div>
-  <div class="tabs" id="tabs">
-    <button class="on" data-t="aim">Aimbot</button>
-    <button data-t="trig">Trigger</button>
-    <button data-t="mag">Magnet</button>
-    <button data-t="rec">Recoil</button>
-  </div>
+<div class="wrap">
+  <header class="hd">
+    <div class="brand">
+      <div class="logo">B</div>
+      <div><h1>Bura</h1><small>Configuration</small></div>
+    </div>
+    <div class="badge"><i></i>Running</div>
+  </header>
+  <nav class="tabs" id="tabs">
+    <button type="button" class="on" data-t="aim">Aimbot</button>
+    <button type="button" data-t="trig">Trigger</button>
+    <button type="button" data-t="mag">Magnet</button>
+    <button type="button" data-t="rec">Recoil</button>
+    <button type="button" data-t="inp">Input</button>
+    <button type="button" data-t="dbg">Debug</button>
+  </nav>
   <form method="post" action="/">
     <div class="pn on" id="p-aim">{tab_aim}</div>
     <div class="pn" id="p-trig">{tab_trigger}</div>
     <div class="pn" id="p-mag">{tab_magnet}</div>
     <div class="pn" id="p-rec">{tab_recoil}</div>
-    <div class="ab"><button type="submit">Apply</button></div>
+    <div class="pn" id="p-inp">{tab_input}</div>
+    <div class="pn" id="p-dbg">{tab_debug}</div>
+    <div class="ab"><button class="btn" type="submit">Apply</button></div>
   </form>
 </div>
-<script>
-document.getElementById('tabs').addEventListener('click',e=>{{
-  const b=e.target.closest('button');
-  if(!b||!b.dataset.t)return;
-  document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
-  document.querySelectorAll('.pn').forEach(x=>x.classList.remove('on'));
-  b.classList.add('on');
-  document.getElementById('p-'+b.dataset.t).classList.add('on');
-}});
-</script>
+<script>{_JS}</script>
 </body>
 </html>"""
