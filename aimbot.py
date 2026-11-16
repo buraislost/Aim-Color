@@ -244,6 +244,8 @@ class aimbot:
 
         self._recoil_start = 0.0
         self._firing = False
+        self._tb_armed = False
+        self._tb_fire_at = 0.0
 
     # ---------- trigger (main aimbot) ----------
     def trigger(self, cfg: dict = None):
@@ -334,14 +336,21 @@ class aimbot:
                 else:
                     self._firing = False
 
-        # Triggerbot
+        # Triggerbot (non-blocking)
         if self.cfg.get("magnet_triggerbot", False):
             pd = int(self.cfg.get("pixel_distance", 5))
             if abs(raw_dx) < pd and abs(raw_dy) < pd:
-                d = float(self.cfg.get("base_delay", 0.05))
-                d += random.gauss(0, d * 0.1)
-                time.sleep(max(0.01, d))
-                self.mouse.click()
+                now = time.perf_counter()
+                if not self._tb_armed:
+                    d = float(self.cfg.get("base_delay", 0.05))
+                    d += random.gauss(0, d * 0.1)
+                    self._tb_fire_at = now + max(0.01, d)
+                    self._tb_armed = True
+                elif now >= self._tb_fire_at:
+                    self.mouse.click()
+                    self._tb_armed = False
+            else:
+                self._tb_armed = False
 
         # Config is pushed from Flask route, no per-frame disk read
 
