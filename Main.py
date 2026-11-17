@@ -20,7 +20,7 @@ from flask import Flask, request, redirect, jsonify, Response
 
 from aimbot import aimbot, load_config, apply_cfg
 from Driver import Mouse
-from Capture import DirectXCapture, DXGICapture, grab_screen_jpg, center_info, list_game_windows, _list_windows
+from Capture import DirectXCapture, DXGICapture, grab_screen_jpg, center_info
 from WebGui import get_html, _show_login_form
 from user32 import (vk_name, wait_for_key, get_async_key_state, get_screen_size,
                     get_foreground_window, get_window_text)
@@ -264,10 +264,7 @@ class BuraApp:
                 c = getattr(self.capture, "center", None)
                 d["capture"] = {"center": list(c) if c else None,
                                 "src": getattr(self.capture, "center_src", "screen"),
-                                "win": str(self.cfg.get("capture_window", "VALORANT")),
-                                "mode": str(self.cfg.get("capture_mode", "screen")),
                                 "reason": center_info().get("reason", ""),
-                                "found": {k: center_info().get(k) for k in ("title", "cls", "size", "how")},
                                 "backend": self._cap_backend + (" (forced)" if self._force_gdi else ""),
                                 "err_streak": self._cap_err_streak}
                 d["wide"] = getattr(self.aim, "wide_info", None)
@@ -368,27 +365,6 @@ class BuraApp:
         @self.app.route("/api/soft/test", methods=["POST"])
         def api_soft_test():
             return jsonify(ok=self.mouse.test_soft())
-
-        @self.app.route("/api/capture/windows", methods=["POST"])
-        def api_cap_windows():
-            try:
-                allw = _list_windows()
-                wins = list_game_windows()
-                filtered = bool(wins)
-                if not wins:        # filter hid everything: show raw list so the game can be spotted
-                    wins = sorted(allw, key=lambda w: w["w"] * w["h"], reverse=True)[:20]
-                return jsonify(ok=True, windows=wins, total=len(allw), filtered=filtered,
-                               current=str(self.cfg.get("capture_window", "VALORANT")))
-            except Exception as e:
-                return jsonify(ok=False, err=f"{type(e).__name__}: {e}", windows=[])
-
-        @self.app.route("/api/capture/window", methods=["POST"])
-        def api_cap_window():
-            b = request.get_json(silent=True) or {}
-            title = str(b.get("title", "VALORANT")).strip()
-            self.cfg["capture_window"] = title
-            apply_cfg(self.cfg)
-            return jsonify(ok=True, title=title)
 
         @self.app.route("/api/capture/backend", methods=["POST"])
         def api_cap_backend():

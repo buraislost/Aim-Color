@@ -15,153 +15,19 @@ except Exception:
     pass
 
 
-# ---------- crosshair center: game window, not screen ----------
-# Windowed (non-maximized / offset) games have their crosshair at the client-area
-# center of the window, which is NOT the screen center. Track the window.
+# ---------- crosshair center: always the primary screen center ----------
 
 import time as _time
 
-_WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
-
-_UW = None
-
-
-def _user():
-    """Private user32 with argtypes: HWNDs / pointers are 64-bit and a bare Python int
-    overflows ctypes' default 32-bit conversion ("OverflowError: int too long to convert")."""
-    global _UW
-    if _UW is None:
-        u = ctypes.WinDLL("user32", use_last_error=True)
-        H = wintypes.HWND
-        u.EnumWindows.argtypes = [_WNDENUMPROC, wintypes.LPARAM]
-        u.EnumWindows.restype = wintypes.BOOL
-        u.IsWindowVisible.argtypes = [H]
-        u.IsWindowVisible.restype = wintypes.BOOL
-        u.IsIconic.argtypes = [H]
-        u.IsIconic.restype = wintypes.BOOL
-        u.GetWindowTextLengthW.argtypes = [H]
-        u.GetWindowTextLengthW.restype = ctypes.c_int
-        u.GetWindowTextW.argtypes = [H, wintypes.LPWSTR, ctypes.c_int]
-        u.GetWindowTextW.restype = ctypes.c_int
-        u.GetClassNameW.argtypes = [H, wintypes.LPWSTR, ctypes.c_int]
-        u.GetClassNameW.restype = ctypes.c_int
-        u.GetClientRect.argtypes = [H, ctypes.POINTER(wintypes.RECT)]
-        u.GetClientRect.restype = wintypes.BOOL
-        u.ClientToScreen.argtypes = [H, ctypes.POINTER(wintypes.POINT)]
-        u.ClientToScreen.restype = wintypes.BOOL
-        _UW = u
-    return _UW
-
-
-def _list_windows():
-    """Visible top-level windows: title, class, client size and client center in screen px."""
-    u = _user()
-    out = []
-
-    def cb(hwnd, _):
-        try:
-            if not u.IsWindowVisible(hwnd):
-                return True
-            n = u.GetWindowTextLengthW(hwnd)
-            title = ""
-            if n:
-                tb = ctypes.create_unicode_buffer(n + 1)
-                u.GetWindowTextW(hwnd, tb, n + 1)
-                title = tb.value
-            cn = ctypes.create_unicode_buffer(256)
-            u.GetClassNameW(hwnd, cn, 256)
-            if u.IsIconic(hwnd):
-                out.append({"title": title, "cls": cn.value, "w": 0, "h": 0, "x": 0, "y": 0,
-                            "cx": 0, "cy": 0, "min": True})
-                return True
-            rc = wintypes.RECT()
-            pt = wintypes.POINT(0, 0)
-            if not u.GetClientRect(hwnd, byref(rc)) or rc.right <= 0 or rc.bottom <= 0:
-                return True
-            u.ClientToScreen(hwnd, byref(pt))
-            out.append({"title": title, "cls": cn.value, "w": rc.right, "h": rc.bottom,
-                        "x": pt.x, "y": pt.y, "cx": pt.x + rc.right // 2,
-                        "cy": pt.y + rc.bottom // 2, "min": False})
-        except Exception:
-            pass                       # never abort the enumeration from inside the callback
-        return True
-
-    u.EnumWindows(_WNDENUMPROC(cb), 0)
-    return out
-
-
-def list_game_windows(limit=14):
-    """Windows worth offering in the GUI picker (big enough to be a game), largest first."""
-    ws = [w for w in _list_windows()
-          if not w["min"] and w["w"] >= 400 and w["h"] >= 250 and (w["title"].strip() or w["cls"] == "UnrealWindow")]
-    ws.sort(key=lambda w: w["w"] * w["h"], reverse=True)
-    return ws[:limit]
-
-
-def _match_window(wins, sub):
-    """(window, how). Title substring first; for the default title also the Unreal game
-    window class, so a title that differs between machines does not break tracking."""
-    key = (sub or "").strip().lower()
-    cands = [w for w in wins if key and key in w["title"].lower()]
-    how = "title"
-    if not cands and key == "valorant":
-        cands = [w for w in wins if w["cls"] == "UnrealWindow" and (w["min"] or (w["w"] >= 640 and w["h"] >= 360))]
-        how = "class UnrealWindow"
-    if not cands:
-        return None, ""
-    cands.sort(key=lambda w: (not w["min"], w["w"] * w["h"]), reverse=True)
-    return cands[0], how
-
-
-_CINFO = {"reason": "", "title": "", "cls": "", "size": None, "how": ""}
-
 
 def center_info():
-    """Why the last get_center() answered what it did (shown in the Debug tab)."""
-    return dict(_CINFO)
+    return {"reason": "fov_x/fov_y box centered on the primary screen"}
 
 
 def get_center():
-    """((cx, cy), src) in primary-screen coords. src = 'window' | 'screen'."""
-    global _CINFO
+    """((cx, cy), 'screen') in primary-screen coords."""
     u = windll.user32
-    sw, sh = u.GetSystemMetrics(0), u.GetSystemMetrics(1)
-    try:
-        from aimbot import load_key
-        title = str(load_key("capture_window", "VALORANT"))
-    except Exception:
-        title = "VALORANT"
-    info = {"reason": "", "title": "", "cls": "", "size": None, "how": ""}
-    try:
-        from aimbot import load_key as _lk
-        mode = str(_lk("capture_mode", "screen"))
-    except Exception:
-        mode = "screen"
-    try:
-        if mode != "window":
-            info["reason"] = "capture_mode=screen: fov_x/fov_y box centered on the primary screen"
-        elif not title.strip():
-            info["reason"] = "capture_window is empty: capture box is centered on the screen"
-        else:
-            w, how = _match_window(_list_windows(), title)
-            if w is None:
-                info["reason"] = ('no window titled "%s" (and no UnrealWindow): start the game windowed, '
-                                  'or pick the window below' % title)
-            elif w["min"]:
-                info["reason"] = "the game window is minimized"
-            else:
-                info.update(title=w["title"], cls=w["cls"], size=[w["w"], w["h"]], how=how)
-                cx, cy = w["cx"], w["cy"]
-                if 0 <= cx < sw and 0 <= cy < sh:
-                    _CINFO = info
-                    return (cx, cy), "window"
-                info["reason"] = ("game window center (%d, %d) is outside the primary monitor %dx%d: "
-                                  "move the game to the main display" % (cx, cy, sw, sh))
-    except Exception as e:
-        info["reason"] = "window lookup failed: %s: %s" % (type(e).__name__, e)
-    _CINFO = info
-    return (sw // 2, sh // 2), "screen"
+    return (u.GetSystemMetrics(0) // 2, u.GetSystemMetrics(1) // 2), "screen"
 
 
 class DirectXCapture:
