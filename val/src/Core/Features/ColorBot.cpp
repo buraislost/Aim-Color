@@ -269,10 +269,18 @@ namespace Core::Features
 				cv::inRange( hsv, cv::Scalar( 140, 80, 100 ), cv::Scalar( 170, 255, 255 ), mask );
 				break;
 
-			case 1: // yellow (Deuteranopia / Protanopia): outline measured on 4 views, H 26-32 (peak 30).
-			        // 24-25 is the orange brick wall of the range, it merged into the head blob and pulled the head up 22px.
-				cv::inRange( hsv, cv::Scalar( 26, 90, 90 ), cv::Scalar( 34, 255, 255 ), mask );
+			case 1: // yellow (Deuteranopia / Protanopia), Bura range: a bright core (V>=235) plus looser pixels
+			        // (H22-35, V>=150) that only count when a core pixel sits within 3px (blur / AA edge).
+			        // tan walls and wood have no core nearby, so they never reach the target picker.
+			{
+				cv::Mat core, loose, near_core;
+				cv::inRange( hsv, cv::Scalar( 25, 110, 235 ), cv::Scalar( 35, 255, 255 ), core );
+				cv::inRange( hsv, cv::Scalar( 22, 90, 150 ), cv::Scalar( 35, 255, 255 ), loose );
+				cv::dilate( core, near_core, cv::Mat::ones( 7, 7, CV_8U ) );
+				cv::bitwise_and( loose, near_core, loose );
+				cv::bitwise_or( core, loose, mask );
 				break;
+			}
 
 			default: // red wraps around hue 0, so it needs two ranges
 			{
