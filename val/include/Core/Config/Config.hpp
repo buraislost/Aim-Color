@@ -64,8 +64,20 @@ namespace Core
 			// delay before the first correction on a fresh target, 0-150ms (+-25% random). 0 = react instantly
 			std::int32_t reaction_ms = 30;
 
+			// aim speed per axis, multiplies the counts sent (1 = as calibrated by lock_gain)
+			float speed_x = 1.f;
+			float speed_y = 1.f;
+
+			// widens the colour range: S/V by this much, hue by min(this, 2). 0 = exact range
+			std::int32_t tolerance = 0;
+
+			bool anti_strafe = false; // X steps x0.65, so the aim does not fight your own strafing
+			bool humanize    = true;  // +-10% random on every step
+			bool legit       = false; // softer ease and a log-compressed cap on big steps
+
 			NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT( Aimbot, bind, fov_x, fov_y, offset_x, offset_y, hold_pct, smooth, auto_aim,
-			                                              lock, lock_gain, lock_settle_ms, reaction_ms )
+			                                              lock, lock_gain, lock_settle_ms, reaction_ms, speed_x, speed_y, tolerance,
+			                                              anti_strafe, humanize, legit )
 		} aimbot_;
 
 		struct Trigger

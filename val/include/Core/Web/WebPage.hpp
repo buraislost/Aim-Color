@@ -20,7 +20,7 @@ h1{font-size:17px;font-weight:700}small{display:block;font-size:11px;color:var(-
 .pn{display:none;flex-direction:column;gap:8px}.pn.on{display:flex}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:16px}
 .card>*+*{padding-top:16px;border-top:1px solid var(--line)}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px 20px}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.g3 .v{min-width:0;padding:0 4px}.g2>*,.g3>*{min-width:0}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px 20px}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.g3 .v{min-width:0;padding:0 4px}.g2>*,.g3>*{min-width:0}.tl{display:flex;gap:8px}.tl .t{flex:1;padding:10px 8px;gap:6px}.tl .l{white-space:nowrap}
 .ab .btn{width:100%;padding:14px;margin-top:6px;font-size:13px;color:#fff;border:none;border-radius:12px;background:linear-gradient(135deg,var(--ac),#5b3fe0);box-shadow:0 8px 22px var(--acg)}
 .s{display:flex;flex-direction:column;gap:6px}.sl{display:flex;justify-content:space-between}
 .l{font-size:12px;color:var(--tx2)}
@@ -79,7 +79,10 @@ function build(){var A=cfg.aimbot_,P=$('p-aim'),c;
  c.appendChild(grp('g2',[slider('aimbot','fov_x','FOV X',20,250,1),slider('aimbot','fov_y','FOV Y',20,250,1)]));
  c.appendChild(grp('g2',[slider('aimbot','lock_gain','Gain',0.1,5,0.05),slider('aimbot','smooth','Smooth',0.1,1,0.05)]));
  c.appendChild(grp('g2',[slider('aimbot','hold_pct','Hold %',0,150,1),slider('aimbot','lock_settle_ms','Settle ms',1,30,1)]));
+ c.appendChild(grp('g2',[slider('aimbot','speed_x','Speed X',0.2,3,0.05),slider('aimbot','speed_y','Speed Y',0.2,3,0.05)]));
  c.appendChild(grp('g3',[slider('aimbot','reaction_ms','Reaction ms',0,150,1),slider('aimbot','offset_x','X Offset',-15,15,1),slider('aimbot','offset_y','Y Offset',-15,15,1)]));
+ c.appendChild(slider('aimbot','tolerance','Tolerance',0,60,1));
+ c.appendChild(grp('tl',[toggle('aimbot','anti_strafe','Anti-Strafe'),toggle('aimbot','humanize','Humanize'),toggle('aimbot','legit','Legit')]));
  P=$('p-trig');P.innerHTML='';c=el('','card');P.appendChild(c);
  c.appendChild(grp('g2',[slider('trigger','scan_area','Scan area',1,30,1),slider('trigger','delay','Delay ms',1,300,1)]));
  c.appendChild(grp('tl',[toggle('trigger','move_check','Move check')]));

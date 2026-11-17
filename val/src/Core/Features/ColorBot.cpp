@@ -264,10 +264,18 @@ namespace Core::Features
 	// 1-2px wide and fades into the body / background, a high floor throws most of it away.
 	void ColorBot::build_mask( const cv::Mat& hsv, cv::Mat& mask ) const
 	{
+		// tolerance widens a band: S/V freely, hue by a hair (a wide hue drags orange brick into yellow)
+		const int tol = std::clamp( config_->aimbot_.tolerance, 0, 60 );
+		const auto in_range = [ & ]( cv::Scalar lo, cv::Scalar hi, cv::Mat& out )
+		{
+			const double ht = std::min( tol, 2 );
+			cv::inRange( hsv, lo - cv::Scalar( ht, tol, tol ), hi + cv::Scalar( ht, tol, tol ), out );
+		};
+
 		switch ( config_->settings_.color )
 		{
 			case 0: // magenta (Tritanopia)
-				cv::inRange( hsv, cv::Scalar( 140, 80, 100 ), cv::Scalar( 170, 255, 255 ), mask );
+				in_range( cv::Scalar( 140, 80, 100 ), cv::Scalar( 170, 255, 255 ), mask );
 				break;
 
 			case 1: // yellow (Deuteranopia / Protanopia), Bura range: a bright core (V>=235) plus looser pixels
@@ -276,7 +284,7 @@ namespace Core::Features
 			{
 				cv::Mat core, loose, near_core;
 				cv::inRange( hsv, cv::Scalar( 25, 110, 235 ), cv::Scalar( 35, 255, 255 ), core );
-				cv::inRange( hsv, cv::Scalar( 22, 90, 150 ), cv::Scalar( 35, 255, 255 ), loose );
+				in_range( cv::Scalar( 22, 90, 150 ), cv::Scalar( 35, 255, 255 ), loose );
 				cv::dilate( core, near_core, cv::Mat::ones( 7, 7, CV_8U ) );
 				cv::bitwise_and( loose, near_core, loose );
 				cv::bitwise_or( core, loose, mask );
@@ -286,8 +294,8 @@ namespace Core::Features
 			default: // red wraps around hue 0, so it needs two ranges
 			{
 				cv::Mat wrap;
-				cv::inRange( hsv, cv::Scalar( 0, 130, 110 ), cv::Scalar( 8, 255, 255 ), mask );
-				cv::inRange( hsv, cv::Scalar( 172, 130, 110 ), cv::Scalar( 179, 255, 255 ), wrap );
+				in_range( cv::Scalar( 0, 130, 110 ), cv::Scalar( 8, 255, 255 ), mask );
+				in_range( cv::Scalar( 172, 130, 110 ), cv::Scalar( 179, 255, 255 ), wrap );
 				cv::bitwise_or( mask, wrap, mask );
 				break;
 			}
@@ -319,7 +327,10 @@ namespace Core::Features
 		last_move_ = now; // every evaluation counts, even one that sends nothing: the remainder must not pile up per frame
 
 		const double gain   = std::clamp<double>( config_->aimbot_.lock_gain, 0.1, 5.0 );
-		const double smooth = std::clamp<double>( config_->aimbot_.smooth, 0.05, 1.0 );
+		const auto& ab      = config_->aimbot_;
+		const double smooth = std::clamp<double>( ab.smooth, 0.05, 1.0 ) * ( ab.legit ? 0.55 : 1.0 );
+		const double spd_x  = std::clamp<double>( ab.speed_x, 0.2, 3.0 );
+		const double spd_y  = std::clamp<double>( ab.speed_y, 0.2, 3.0 );
 
 		while ( !sent_.empty( ) && now - sent_.front( ).t > std::chrono::milliseconds( PENDING_MS ) )
 			sent_.pop_front( );
@@ -346,13 +357,29 @@ namespace Core::Features
 
 		const double ref  = std::max( 8.0 * px_scale, 1.5 * head_h );
 		const double ease = std::clamp( dist / ref, EASE_MIN, 1.0 );
-		const double k    = gain * smooth * ease * rand_real( 0.9, 1.1 );
+		const double k    = gain * smooth * ease * ( ab.humanize ? rand_real( 0.9, 1.1 ) : 1.0 );
 
-		const double fx = ex * k + rem_x_;
-		const double fy = ey * k + rem_y_;
+		const double fx = ex * k * spd_x + rem_x_;
+		const double fy = ey * k * spd_y + rem_y_;
 
-		const auto ix = static_cast<std::int32_t>( std::lround( fx ) );
-		const auto iy = static_cast<std::int32_t>( std::lround( fy ) );
+		auto ix = static_cast<std::int32_t>( std::lround( fx ) );
+		auto iy = static_cast<std::int32_t>( std::lround( fy ) );
+
+		// anti-strafe: ceil so a 1-count step is not truncated to 0
+		if ( ab.anti_strafe && ix != 0 )
+			ix = static_cast<std::int32_t>( std::copysign( std::ceil( std::abs( ix ) * 0.65 ), ix ) );
+
+		// legit: big steps are log-compressed above 5 counts (the error feedback makes up the difference next report)
+		if ( ab.legit )
+		{
+			const auto squash = [ ]( std::int32_t v )
+			{
+				return std::abs( v ) > 5 ? static_cast<std::int32_t>( std::copysign( 5.0 + std::log1p( std::abs( v ) - 5.0 ), v ) ) : v;
+			};
+
+			ix = squash( ix );
+			iy = squash( iy );
+		}
 
 		rem_x_ = fx - ix;
 		rem_y_ = fy - iy;

@@ -144,6 +144,12 @@ namespace Core::Web
 				take<float>( *a, "smooth", c.smooth, 0.1f, 1.f );
 				take<std::int32_t>( *a, "lock_settle_ms", c.lock_settle_ms, 1, 30 );
 				take<std::int32_t>( *a, "reaction_ms", c.reaction_ms, 0, 150 );
+				take<float>( *a, "speed_x", c.speed_x, 0.2f, 3.f );
+				take<float>( *a, "speed_y", c.speed_y, 0.2f, 3.f );
+				take<std::int32_t>( *a, "tolerance", c.tolerance, 0, 60 );
+				take_bool( *a, "anti_strafe", c.anti_strafe );
+				take_bool( *a, "humanize", c.humanize );
+				take_bool( *a, "legit", c.legit );
 				take_bool( *a, "auto_aim", c.auto_aim );
 				take_mode( *a, c.bind );
 			}

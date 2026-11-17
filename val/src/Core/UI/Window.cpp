@@ -386,6 +386,19 @@ namespace Core::UI
 					ImGui::Text( "Smooth (1 = snap)" );
 					ImGui::SliderFloat( "##smooth", &config->aimbot_.smooth, 0.1f, 1.f, "%.2f" );
 
+					ImGui::Text( "Speed (X)" );
+					ImGui::SliderFloat( "##speed_x", &config->aimbot_.speed_x, 0.2f, 3.f, "%.2f" );
+
+					ImGui::Text( "Speed (Y)" );
+					ImGui::SliderFloat( "##speed_y", &config->aimbot_.speed_y, 0.2f, 3.f, "%.2f" );
+
+					ImGui::Text( "Tolerance" );
+					ImGui::SliderInt( "##tolerance", &config->aimbot_.tolerance, 0, 60 );
+
+					ImGui::Checkbox( "Anti-Strafe", &config->aimbot_.anti_strafe );
+					ImGui::Checkbox( "Humanize", &config->aimbot_.humanize );
+					ImGui::Checkbox( "Legit", &config->aimbot_.legit );
+
 					ImGui::Text( "Reaction delay" );
 					ImGui::SliderInt( "##reaction", &config->aimbot_.reaction_ms, 0, 150, "%dms" );
 
