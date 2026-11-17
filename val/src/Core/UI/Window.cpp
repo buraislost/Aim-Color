@@ -7,6 +7,46 @@
 
 namespace Core::UI
 {
+
+	// Bura web UI look: dark violet palette, 12px rounded cards, pill tabs, violet sliders
+	static void apply_bura_style( )
+	{
+		ImGuiStyle& st = ImGui::GetStyle( );
+		st.WindowRounding = 12.f;  st.ChildRounding = 12.f; st.FrameRounding = 8.f;
+		st.PopupRounding  = 8.f;   st.GrabRounding  = 8.f;  st.TabRounding   = 8.f;
+		st.ScrollbarRounding = 8.f;
+		st.WindowPadding = { 16.f, 14.f }; st.FramePadding = { 10.f, 7.f };
+		st.ItemSpacing   = { 10.f, 9.f };  st.WindowBorderSize = 1.f; st.FrameBorderSize = 1.f;
+		st.GrabMinSize   = 14.f;
+
+		auto rgb = [ ]( int r, int g, int b, float a = 1.f ) { return ImVec4( r / 255.f, g / 255.f, b / 255.f, a ); };
+		const ImVec4 bg = rgb( 11, 11, 16 ), panel = rgb( 18, 18, 26 ), card = rgb( 23, 23, 34 ), card2 = rgb( 28, 28, 42 );
+		const ImVec4 line = rgb( 38, 38, 54 ), line2 = rgb( 49, 49, 74 );
+		const ImVec4 tx = rgb( 232, 232, 242 ), tx2 = rgb( 154, 154, 180 ), tx3 = rgb( 95, 95, 122 );
+		const ImVec4 ac = rgb( 124, 92, 252 ), ac2 = rgb( 164, 139, 255 );
+
+		ImVec4* c = st.Colors;
+		c[ ImGuiCol_Text ] = tx;                 c[ ImGuiCol_TextDisabled ] = tx3;
+		c[ ImGuiCol_WindowBg ] = bg;             c[ ImGuiCol_ChildBg ] = card;
+		c[ ImGuiCol_PopupBg ] = card2;           c[ ImGuiCol_Border ] = line;
+		c[ ImGuiCol_FrameBg ] = card2;           c[ ImGuiCol_FrameBgHovered ] = line2;
+		c[ ImGuiCol_FrameBgActive ] = line2;
+		c[ ImGuiCol_TitleBg ] = panel;           c[ ImGuiCol_TitleBgActive ] = panel;
+		c[ ImGuiCol_TitleBgCollapsed ] = panel;
+		c[ ImGuiCol_CheckMark ] = ac2;
+		c[ ImGuiCol_SliderGrab ] = ac;           c[ ImGuiCol_SliderGrabActive ] = ac2;
+		c[ ImGuiCol_Button ] = card2;            c[ ImGuiCol_ButtonHovered ] = ac;
+		c[ ImGuiCol_ButtonActive ] = ac2;
+		c[ ImGuiCol_Header ] = rgb( 124, 92, 252, 0.28f );
+		c[ ImGuiCol_HeaderHovered ] = rgb( 124, 92, 252, 0.45f );
+		c[ ImGuiCol_HeaderActive ] = ac;
+		c[ ImGuiCol_Tab ] = panel;               c[ ImGuiCol_TabHovered ] = rgb( 124, 92, 252, 0.55f );
+		c[ ImGuiCol_TabActive ] = ac;            c[ ImGuiCol_TabUnfocused ] = panel;
+		c[ ImGuiCol_TabUnfocusedActive ] = rgb( 124, 92, 252, 0.6f );
+		c[ ImGuiCol_Separator ] = line;          c[ ImGuiCol_ScrollbarBg ] = bg;
+		c[ ImGuiCol_ScrollbarGrab ] = line2;
+		( void )tx2;
+	}
 	Window::Window( const std::wstring& title, const ImVec2 size, ServiceHub& service_hub )
 		: size_( size ),
 		  offset_( 0, 0 ),
@@ -75,6 +115,7 @@ namespace Core::UI
 	void Window::initialize_imgui( ) const
 	{
 		ImGui::CreateContext( );
+		apply_bura_style( );
 
 		ImGuiIO& io    = ImGui::GetIO( );
 		io.IniFilename = nullptr;
@@ -307,6 +348,12 @@ namespace Core::UI
 
 			// the debug tab turns this back on every frame it is visible
 			service_hub_->get<DebugState>( )->enabled = false;
+
+			// brand header (Bura web UI): violet title + status badge
+			ImGui::TextColored( ImVec4( 0.643f, 0.545f, 1.f, 1.f ), "Bura" );
+			ImGui::SameLine( ImGui::GetWindowWidth( ) - 100.f );
+			ImGui::TextColored( ImVec4( 0.24f, 0.86f, 0.59f, 1.f ), "Running" );
+			ImGui::Separator( );
 
 			if ( ImGui::BeginTabBar( "##tabs" ) )
 			{
