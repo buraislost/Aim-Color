@@ -344,8 +344,11 @@ namespace Core::Features
 			pending_y += s.dy;
 		}
 
+		// "body chasing" guard: judged on the raw vertical offset (not the corrected one) so it does not flap
+		const bool y_blocked = !ab.y_axis || ( ab.y_limit > 0 && std::abs( delta.y ) > ab.y_limit * px_scale );
+
 		const double ex   = delta.x - pending_x / gain;
-		const double ey   = delta.y - pending_y / gain;
+		const double ey   = y_blocked ? 0.0 : delta.y - pending_y / gain;
 		const double dist = std::hypot( ex, ey );
 
 		if ( dist < DEADZONE_PX * px_scale )
@@ -382,7 +385,7 @@ namespace Core::Features
 		}
 
 		rem_x_ = fx - ix;
-		rem_y_ = fy - iy;
+		rem_y_ = y_blocked ? 0.0 : fy - iy;
 
 		if ( ix == 0 && iy == 0 )
 			return;

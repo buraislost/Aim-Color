@@ -150,6 +150,8 @@ namespace Core::Web
 				take_bool( *a, "anti_strafe", c.anti_strafe );
 				take_bool( *a, "humanize", c.humanize );
 				take_bool( *a, "legit", c.legit );
+				take_bool( *a, "y_axis", c.y_axis );
+				take<std::int32_t>( *a, "y_limit", c.y_limit, 0, 30 );
 				take_bool( *a, "auto_aim", c.auto_aim );
 				take_mode( *a, c.bind );
 			}

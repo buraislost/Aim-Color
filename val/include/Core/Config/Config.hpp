@@ -82,9 +82,15 @@ namespace Core
 			bool humanize    = true;  // +-10% random on every step
 			bool legit       = false; // softer ease and a log-compressed cap on big steps
 
+			// vertical control against chasing a downed body: y_axis off = never move vertically.
+			// y_limit 1-30: Y is only corrected while the target is within that many px above/below the crosshair
+			// (a body far below the head is ignored); 0 = no limit.
+			bool y_axis = true;
+			std::int32_t y_limit = 0;
+
 			NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT( Aimbot, bind, fov_x, fov_y, offset_x, offset_y, hold_pct, smooth, auto_aim,
 			                                              lock, lock_gain, lock_settle_ms, reaction_ms, speed_x, speed_y, tolerance,
-			                                              anti_strafe, humanize, legit )
+			                                              anti_strafe, humanize, legit, y_axis, y_limit )
 		} aimbot_;
 
 		struct Trigger

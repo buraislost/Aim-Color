@@ -106,7 +106,9 @@ namespace Core::UI::panel
 			ImGui::SameLine( 0.f, th::kSpace2 );
 			wd::slider_int( "Settle", &ab.lock_settle_ms, 1, 30, "%dms", w );
 
-			wd::slider_int( "Reaction delay", &ab.reaction_ms, 0, 150, "%dms" );
+			wd::slider_int( "Reaction delay", &ab.reaction_ms, 0, 150, "%dms", w );
+			ImGui::SameLine( 0.f, th::kSpace2 );
+			wd::slider_int( "Y limit", &ab.y_limit, 0, 30, ab.y_limit == 0 ? "none" : "%dpx", w );
 		}
 
 		void behaviour_group( Config& config )
@@ -122,6 +124,7 @@ namespace Core::UI::panel
 			wd::toggle( "Anti-Strafe", &ab.anti_strafe, cell );
 			ImGui::SameLine( 0.f, th::kSpace2 );
 			wd::toggle( "Humanize", &ab.humanize, cell );
+			wd::toggle( "Y axis", &ab.y_axis, cell );
 		}
 
 		void config_buttons( Config& config, Mouse& mouse, char* com_buf )
