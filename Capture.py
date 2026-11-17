@@ -134,7 +134,14 @@ def get_center():
         title = "VALORANT"
     info = {"reason": "", "title": "", "cls": "", "size": None, "how": ""}
     try:
-        if not title.strip():
+        from aimbot import load_key as _lk
+        mode = str(_lk("capture_mode", "screen"))
+    except Exception:
+        mode = "screen"
+    try:
+        if mode != "window":
+            info["reason"] = "capture_mode=screen: fov_x/fov_y box centered on the primary screen"
+        elif not title.strip():
             info["reason"] = "capture_window is empty: capture box is centered on the screen"
         else:
             w, how = _match_window(_list_windows(), title)

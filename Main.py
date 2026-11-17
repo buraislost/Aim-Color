@@ -166,7 +166,7 @@ class BuraApp:
                        int(self.cfg.get("magnet_fov", 50))) * 2
 
             if self.capture is None:
-                pref = self.cfg.get("capture_backend", "auto")
+                pref = self.cfg.get("capture_backend", "gdi")
                 if pref == "gdi" or self._force_gdi:
                     self.capture = DirectXCapture(fov=need)
                     self._cap_backend = "gdi"
@@ -265,6 +265,7 @@ class BuraApp:
                 d["capture"] = {"center": list(c) if c else None,
                                 "src": getattr(self.capture, "center_src", "screen"),
                                 "win": str(self.cfg.get("capture_window", "VALORANT")),
+                                "mode": str(self.cfg.get("capture_mode", "screen")),
                                 "reason": center_info().get("reason", ""),
                                 "found": {k: center_info().get(k) for k in ("title", "cls", "size", "how")},
                                 "backend": self._cap_backend + (" (forced)" if self._force_gdi else ""),

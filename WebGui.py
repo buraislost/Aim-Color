@@ -520,6 +520,7 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
         ),
         _g2(
             _sel("aim_engine", "Engine", ["cpp", "legacy"], cfg.get("aim_engine", "cpp")),
+            _sel("capture_mode", "Capture area", ["screen", "window"], cfg.get("capture_mode", "screen")),
             _s("lock_gain", "Gain (counts/px)", cfg.get("lock_gain", 1.0), 0.1, 5.0, 0.05),
         ),
         _g3(
