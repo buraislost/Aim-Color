@@ -157,7 +157,8 @@ class CppAim:
 
         if not self.acquired:
             self.acquired, self.acquired_at = True, now
-            self.reaction = self.rng.uniform(20.0, 40.0) / 1000.0
+            r = max(0.0, min(150.0, float(cfg.get("reaction_ms", 30))))
+            self.reaction = (self.rng.uniform(r * 0.75, r * 1.25) if r > 0 else 0.0) / 1000.0
 
         if self.holding:
             out["why"] = "hold"
