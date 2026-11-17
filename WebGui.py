@@ -518,7 +518,7 @@ def get_html(cfg: dict, colors: list, aim_modes: list, magnet_option: list,
             _s("fovx", "FOV X", cfg.get("fovx", 50), 10, 500),
             _s("fovy", "FOV Y", cfg.get("fovy", 50), 10, 500),
         ),
-        _g2(
+        _g3(
             _sel("aim_engine", "Engine", ["cpp", "legacy"], cfg.get("aim_engine", "cpp")),
             _sel("capture_mode", "Capture area", ["screen", "window"], cfg.get("capture_mode", "screen")),
             _s("lock_gain", "Gain (counts/px)", cfg.get("lock_gain", 1.0), 0.1, 5.0, 0.05),
