@@ -1,8 +1,14 @@
 #pragma once
 
+// ui/Window.hpp — the Bura app window: Win32 + D3D11 + ImGui, tray icon, main loop
+// Depends: D3D11Device, ServiceHub
+
 #include "Core/UI/D3D11Device.hpp"
 
+#include <atomic>
+#include <chrono>
 #include <shellapi.h>
+#include <string>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
 
@@ -24,10 +30,29 @@ namespace Core::UI
 		void request_close( ) { close_prompt_ = true; }
 
 	private:
+		// window + imgui lifetime
 		void initialize_imgui( ) const;
 		void shutdown_imgui( ) const;
-
 		static LRESULT CALLBACK wnd_proc( HWND, UINT, WPARAM, LPARAM );
+
+		// main loop steps
+		void pump_messages( );
+		void autosave_config( );
+		void drag_window( );
+		void render_frame( );
+		void draw_ui( );
+		void draw_tab_body( int tab );
+		void present( );
+		void refresh_connection( );
+
+		// tray
+		void hide_to_tray( );
+		void restore_from_tray( );
+		void show_tray_menu( );
+
+		// debug tab: RGBA preview uploaded to a dynamic texture
+		void upload_preview( const cv::Mat& rgba );
+		void render_debug_tab( );
 
 		HWND hwnd_ {};
 		WNDCLASSEXW wc_ {};
@@ -36,25 +61,24 @@ namespace Core::UI
 
 		std::shared_ptr<D3D11Device> d3d_device_;
 
-		// debug tab: RGBA preview uploaded to a dynamic texture
 		Microsoft::WRL::ComPtr<ID3D11Texture2D> preview_tex_;
 		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> preview_srv_;
 		int preview_w_ = 0;
 		int preview_h_ = 0;
 
-		void upload_preview( const cv::Mat& rgba );
-		void render_debug_tab( );
-
 		ServiceHub* service_hub_ = nullptr;
 
-		// tray
-		void hide_to_tray( );
-		void restore_from_tray( );
-		void show_tray_menu( );
 		NOTIFYICONDATAW nid_ {};
 		bool in_tray_ = false;
-		std::atomic<bool> close_prompt_ = false;
 
+		char com_buf_[ 16 ] = {};
+		bool connected_     = false;
+		double next_connection_check_ = 0.0;
+
+		std::string saved_json_;
+		std::chrono::steady_clock::time_point last_save_check_ {};
+
+		std::atomic<bool> close_prompt_ = false;
 		std::atomic<bool> running_ = true;
 	};
 }

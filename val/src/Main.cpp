@@ -6,6 +6,7 @@
 #include "Core/Mouse/Mouse.hpp"
 #include "Core/UI/Window.hpp"
 #include "Core/Web/WebGui.hpp"
+#include "Core/Constants.hpp"
 
 #include <timeapi.h>
 
@@ -61,13 +62,16 @@ public:
 			// browser UI, loopback only. a busy port just means no web UI, the ImGui window still works
 			std::unique_ptr<Core::Web::WebGui> web;
 
-			try { web = std::make_unique<Core::Web::WebGui>( *service_hub_ ); }
-			catch ( ... ) { }
+			if constexpr ( Core::kWebUiEnabled )
+			{
+				try { web = std::make_unique<Core::Web::WebGui>( *service_hub_ ); }
+				catch ( ... ) { }
+			}
 
 			const auto window = std::make_shared<Core::UI::Window>
 			(
 				L"Bura",
-				ImVec2( 450.f, 640.f ),
+				ImVec2( Core::kWindowWidth, Core::kWindowHeight ),
 				*service_hub_
 			);
 

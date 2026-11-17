@@ -7,6 +7,11 @@
     <ClCompile Include="src\Utility\String.cpp" />
     <ClCompile Include="src\Core\UI\D3D11Device.cpp" />
     <ClCompile Include="src\Core\UI\Window.cpp" />
+    <ClCompile Include="src\Core\UI\Theme.cpp" />
+    <ClCompile Include="src\Core\UI\Panels.cpp" />
+    <ClCompile Include="src\Core\UI\DebugTab.cpp" />
+    <ClCompile Include="src\Core\UI\Tray.cpp" />
+    <ClCompile Include="src\Core\UI\WindowProc.cpp" />
     <ClCompile Include="src\Core\BindSystem\BindSystem.cpp" />
     <ClCompile Include="src\Core\Mouse\Mouse.cpp" />
     <ClCompile Include="src\Core\Web\WebGui.cpp" />
@@ -20,6 +25,11 @@
     <ClInclude Include="include\Utility\String.hpp" />
     <ClInclude Include="include\Core\UI\D3D11Device.hpp" />
     <ClInclude Include="include\Core\UI\Window.hpp" />
+    <ClInclude Include="include\Core\UI\Theme.hpp" />
+    <ClInclude Include="include\Core\UI\Widgets.hpp" />
+    <ClInclude Include="include\Core\UI\Panels.hpp" />
+    <ClInclude Include="include\Core\UI\TrayMessage.hpp" />
+    <ClInclude Include="include\Core\Constants.hpp" />
     <ClInclude Include="include\Core\Web\WebGui.hpp" />
     <ClInclude Include="include\Core\Web\WebPage.hpp" />
     <ClInclude Include="include\Core\BindSystem\BindSystem.hpp" />
