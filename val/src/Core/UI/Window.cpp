@@ -66,6 +66,10 @@ namespace Core::UI
 		d3d_device_ = std::make_shared<D3D11Device>( hwnd_ );
 		initialize_imgui( );
 
+		if constexpr ( kHideFromCapture ) {
+			SetWindowDisplayAffinity( hwnd_, WDA_EXCLUDEFROMCAPTURE ); // needs Windows 10 2004 or later
+		}
+
 		ShowWindow( hwnd_, SW_SHOWDEFAULT );
 		UpdateWindow( hwnd_ );
 	}

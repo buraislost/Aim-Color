@@ -10,7 +10,8 @@ namespace Core::UI::widget
 	namespace th = theme;
 
 	// ===== Constants =====
-	inline constexpr float kFieldHeight = 36.f; // label row + track
+	inline constexpr float kFieldHeight = 44.f; // caption row + control, same height for sliders and combos
+inline constexpr float kComboHeight = 22.f;
 	inline constexpr float kTrackHeight = 4.f;
 	inline constexpr float kKnobRadius  = 7.f;
 
@@ -124,11 +125,18 @@ namespace Core::UI::widget
 		if ( width <= 0.f ) { width = full_width( ); }
 
 		ImGui::PushID( label );
-		ImGui::BeginGroup( );
-		caption( label );
+		const ImVec2 pos = ImGui::GetCursorScreenPos( );
+
+		// caption on top like a slider, box at the bottom edge so both fields line up
+		ImGui::TextColored( th::kMuted, "%s", label );
+		ImGui::SetCursorScreenPos( { pos.x, pos.y + kFieldHeight - kComboHeight } );
+		ImGui::PushStyleVar( ImGuiStyleVar_FramePadding, { th::kSpace2, 2.f } );
 		ImGui::SetNextItemWidth( width );
 		ImGui::Combo( "##v", v, items, count );
-		ImGui::EndGroup( );
+		ImGui::PopStyleVar( );
+
+		ImGui::SetCursorScreenPos( pos );
+		ImGui::Dummy( { width, kFieldHeight } );
 		ImGui::PopID( );
 	}
 

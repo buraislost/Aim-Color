@@ -9,6 +9,10 @@ namespace Core
 	inline constexpr bool kWebUiEnabled = false;
 	inline constexpr const char* kWebUiUrl = "http://127.0.0.1:8765";
 
+	// hide the Bura window from screen share / capture tools (Windows display affinity).
+	// it does not hide the process or the overlay from anything else.
+	inline constexpr bool kHideFromCapture = true;
+
 	inline constexpr float kWindowWidth  = 448.f;
 	inline constexpr float kWindowHeight = 720.f;
 }
