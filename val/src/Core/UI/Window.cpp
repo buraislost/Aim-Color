@@ -5,6 +5,8 @@
 #include "Core/Mouse/Mouse.hpp"
 #include "Core/Features/DebugState.hpp"
 
+#include <shellapi.h>
+
 namespace Core::UI
 {
 
@@ -353,7 +355,11 @@ namespace Core::UI
 			ImGui::TextColored( ImVec4( 0.643f, 0.545f, 1.f, 1.f ), "Bura" );
 			ImGui::SameLine( ImGui::GetWindowWidth( ) - 100.f );
 			ImGui::TextColored( ImVec4( 0.24f, 0.86f, 0.59f, 1.f ), "Running" );
-			ImGui::TextDisabled( "Web UI: http://127.0.0.1:8765" );
+			if ( ImGui::Button( "Open web UI" ) )
+				ShellExecuteA( nullptr, "open", "http://127.0.0.1:8765", nullptr, nullptr, SW_SHOWNORMAL );
+
+			ImGui::SameLine( );
+			ImGui::TextDisabled( "http://127.0.0.1:8765" );
 			ImGui::Separator( );
 
 			if ( ImGui::BeginTabBar( "##tabs" ) )
