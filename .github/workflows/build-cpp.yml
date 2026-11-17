@@ -1,0 +1,60 @@
+name: Build val.exe (C++)
+
+on:
+  push:
+    branches: [cpp-build]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VCPKG_DEFAULT_TRIPLET: x64-windows-static
+  VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-cache
+
+jobs:
+  build:
+    runs-on: windows-latest          # VS 2026 image (toolset v145) since June 2026
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache vcpkg binaries (opencv takes a long time to build)
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
+      - name: Prepare vcpkg
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" integrate install
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build
+        shell: pwsh
+        run: >-
+          msbuild val.sln /m /nologo /p:Configuration=Release /p:Platform=x64
+          /p:VcpkgEnableManifest=true /p:VcpkgTriplet=x64-windows-static
+
+      - name: Locate exe
+        shell: pwsh
+        run: Get-ChildItem build -Recurse -Filter *.exe | Select-Object FullName, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: val-exe
+          path: build/release/val.exe
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cpp-b${{ github.run_number }}
+          name: C++ build ${{ github.run_number }}
+          body: |
+            Built from `cpp-build` (copy of `main`), commit ${{ github.sha }}
+          files: build/release/val.exe
