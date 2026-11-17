@@ -10,5 +10,5 @@ namespace Core
 	inline constexpr const char* kWebUiUrl = "http://127.0.0.1:8765";
 
 	inline constexpr float kWindowWidth  = 448.f;
-	inline constexpr float kWindowHeight = 640.f;
+	inline constexpr float kWindowHeight = 720.f;
 }

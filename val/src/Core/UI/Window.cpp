@@ -109,6 +109,10 @@ namespace Core::UI
 		io.IniFilename = nullptr;
 		io.LogFilename = nullptr;
 
+		// one UI font: Segoe UI when present (the built-in bitmap font is the fallback)
+		constexpr const char* kFontPath = "C:\\Windows\\Fonts\\segoeui.ttf";
+		io.Fonts->AddFontFromFileTTF( kFontPath, theme::kFontSize );
+
 		ImGui_ImplWin32_Init( hwnd_ );
 		ImGui_ImplDX11_Init( d3d_device_->get_device( ), d3d_device_->get_device_context( ) );
 	}

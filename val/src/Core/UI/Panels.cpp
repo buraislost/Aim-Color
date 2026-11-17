@@ -55,40 +55,58 @@ namespace Core::UI::panel
 			                                              ImGui::GetColorU32( c ) );
 		}
 
-		void bind_row( const char* caption, const char* id, KeyBind& bind, const BindSystem& binds )
+		void bind_field( const char* caption, const char* id, KeyBind& bind, const BindSystem& binds )
 		{
-			wd::label( caption );
+			wd::caption( caption );
 			binds.render_keybind_button( id, bind, true, { -1.f, 0.f } );
+		}
+
+		void target_group( Config& config )
+		{
+			static const char* const colors[ ] = { "Magenta", "Yellow", "Red" };
+			const float w = wd::half_width( );
+
+			wd::combo( "Color", &config.settings_.color, colors, 3, w );
+			ImGui::SameLine( 0.f, th::kSpace2 );
+			wd::slider_int( "Tolerance", &config.aimbot_.tolerance, 0, 60, "%d", w );
 		}
 
 		void aim_group( Config& config, const BindSystem& binds )
 		{
-			auto& ab = config.aimbot_;
+			auto& ab      = config.aimbot_;
+			const float w = wd::half_width( );
 
 			wd::section( "AIM" );
-			bind_row( "Bind", "Aimbot", ab.bind, binds );
-			wd::pair_int( "FOV", &ab.fov_x, &ab.fov_y, { 20, 250 }, "X %dpx", "Y %dpx" );
-			wd::pair_int( "Offset", &ab.offset_x, &ab.offset_y, { -15, 15 }, "X %dpx", "Y %dpx" );
+			bind_field( "Bind", "Aimbot", ab.bind, binds );
+
+			wd::slider_int( "FOV X", &ab.fov_x, 20, 250, "%dpx", w );
+			ImGui::SameLine( 0.f, th::kSpace2 );
+			wd::slider_int( "FOV Y", &ab.fov_y, 20, 250, "%dpx", w );
+
+			wd::slider_int( "Offset X", &ab.offset_x, -15, 15, "%dpx", w );
+			ImGui::SameLine( 0.f, th::kSpace2 );
+			wd::slider_int( "Offset Y", &ab.offset_y, -15, 15, "%dpx", w );
 		}
 
 		void motion_group( Config& config )
 		{
-			auto& ab = config.aimbot_;
+			auto& ab      = config.aimbot_;
+			const float w = wd::half_width( );
 
 			wd::section( "MOTION" );
-			wd::pair_float( "Gain / Smooth", &ab.lock_gain, &ab.smooth, { 0.1f, 5.f }, "G %.2f", "S %.2f" );
-			ab.smooth = std::min( ab.smooth, 1.f );
-			wd::pair_float( "Speed", &ab.speed_x, &ab.speed_y, { 0.2f, 3.f }, "X %.2f", "Y %.2f" );
-		}
+			wd::slider_float( "Gain", &ab.lock_gain, 0.1f, 5.f, "%.2f", w );
+			ImGui::SameLine( 0.f, th::kSpace2 );
+			wd::slider_float( "Smooth", &ab.smooth, 0.1f, 1.f, "%.2f", w );
 
-		void timing_group( Config& config )
-		{
-			auto& ab = config.aimbot_;
+			wd::slider_float( "Speed X", &ab.speed_x, 0.2f, 3.f, "%.2f", w );
+			ImGui::SameLine( 0.f, th::kSpace2 );
+			wd::slider_float( "Speed Y", &ab.speed_y, 0.2f, 3.f, "%.2f", w );
 
-			wd::section( "TIMING" );
-			wd::slider_int( "Hold", &ab.hold_pct, 0, 150, "%d%% of head" );
-			wd::pair_int( "React / Settle", &ab.reaction_ms, &ab.lock_settle_ms, { 0, 150 }, "%dms", "%dms" );
-			ab.lock_settle_ms = std::clamp( ab.lock_settle_ms, 1, 30 );
+			wd::slider_int( "Hold", &ab.hold_pct, 0, 150, "%d%%", w );
+			ImGui::SameLine( 0.f, th::kSpace2 );
+			wd::slider_int( "Settle", &ab.lock_settle_ms, 1, 30, "%dms", w );
+
+			wd::slider_int( "Reaction delay", &ab.reaction_ms, 0, 150, "%dms" );
 		}
 
 		void behaviour_group( Config& config )
@@ -161,26 +179,22 @@ namespace Core::UI::panel
 
 	void aimbot( Config& config, const BindSystem& binds )
 	{
-		static const char* const colors[ ] = { "Magenta", "Yellow", "Red" };
-
-		wd::section( "TARGET" );
-		wd::combo( "Color", &config.settings_.color, colors, 3 );
-		wd::slider_int( "Tolerance", &config.aimbot_.tolerance, 0, 60 );
-
+		target_group( config );
 		aim_group( config, binds );
 		motion_group( config );
-		timing_group( config );
 		behaviour_group( config );
 	}
 
 	void trigger( Config& config, const BindSystem& binds )
 	{
-		auto& tr = config.trigger_;
+		auto& tr      = config.trigger_;
+		const float w = wd::half_width( );
 
 		wd::section( "TRIGGER" );
-		bind_row( "Bind", "Trigger", tr.bind, binds );
-		wd::slider_int( "Scan area", &tr.scan_area, 1, 30, "%dpx" );
-		wd::slider_int( "Delay", &tr.delay, 1, 300, "%dms" );
+		bind_field( "Bind", "Trigger", tr.bind, binds );
+		wd::slider_int( "Scan area", &tr.scan_area, 1, 30, "%dpx", w );
+		ImGui::SameLine( 0.f, th::kSpace2 );
+		wd::slider_int( "Delay", &tr.delay, 1, 300, "%dms", w );
 		wd::toggle( "Move check", &tr.move_check );
 	}
 
@@ -193,7 +207,7 @@ namespace Core::UI::panel
 		wd::combo( "Device", &st.input_backend, backends, 3 );
 
 		if ( st.input_backend == 1 ) {
-			wd::label( "COM port" );
+			wd::caption( "COM port" );
 			ImGui::SetNextItemWidth( -1.f );
 
 			if ( ImGui::InputText( "##com_port", com_buf, 16 ) ) {

@@ -16,6 +16,7 @@ namespace Core::UI::theme
 	inline constexpr float kRowHeight   = 32.f;
 	inline constexpr float kLabelWidth  = 96.f;
 	inline constexpr float kLogoSize    = 32.f;
+	inline constexpr float kFontSize    = 15.f;
 	inline constexpr float kTitleScale  = 1.25f; // the one "heading" size, regular text is 1.0
 	inline constexpr float kDragZone    = 56.f;  // top strip that moves the window
 
