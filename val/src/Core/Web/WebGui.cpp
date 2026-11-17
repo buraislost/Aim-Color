@@ -143,6 +143,7 @@ namespace Core::Web
 				take<float>( *a, "lock_gain", c.lock_gain, 0.1f, 5.f );
 				take<float>( *a, "smooth", c.smooth, 0.1f, 1.f );
 				take<std::int32_t>( *a, "lock_settle_ms", c.lock_settle_ms, 1, 30 );
+				take<std::int32_t>( *a, "reaction_ms", c.reaction_ms, 0, 150 );
 				take_bool( *a, "auto_aim", c.auto_aim );
 				take_mode( *a, c.bind );
 			}

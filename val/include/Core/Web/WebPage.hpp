@@ -7,18 +7,21 @@ namespace Core::Web
 :root{--bg:#0b0b10;--panel:#12121a;--card:#171722;--card2:#1c1c2a;--line:#262636;--line2:#31314a;--tx:#e8e8f2;--tx2:#9a9ab4;--tx3:#5f5f7a;--ac:#7c5cfc;--ac2:#a48bff;--acg:rgba(124,92,252,.28)}
 *{margin:0;padding:0;box-sizing:border-box}html{color-scheme:dark}
 body{background:radial-gradient(900px 420px at 50% -120px,rgba(124,92,252,.16),transparent 70%),var(--bg);color:var(--tx);font:13px/1.45 Inter,"Segoe UI",system-ui,sans-serif;min-height:100vh;display:flex;justify-content:center;padding:20px 12px}
-.wrap{width:100%;max-width:460px}
+.wrap{width:100%;max-width:440px}
 .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .brand{display:flex;align-items:center;gap:9px}
 .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,var(--ac),#5b3fe0);color:#fff;font-weight:800;font-size:16px;box-shadow:0 6px 18px var(--acg)}
 h1{font-size:17px;font-weight:700}small{display:block;font-size:11px;color:var(--tx3)}
 .badge{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--tx2);background:var(--panel);border:1px solid var(--line);padding:4px 11px;border-radius:99px}
 .badge i{width:7px;height:7px;border-radius:50%;background:#3ddc97;box-shadow:0 0 8px #3ddc97}.badge.off i{background:#e5484d;box-shadow:0 0 8px #e5484d}
-.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px;margin-bottom:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:4px;margin-bottom:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
 .tabs button{background:none;border:none;color:var(--tx3);font:600 12px inherit;font-family:inherit;padding:8px 0;border-radius:8px;cursor:pointer}
 .tabs button:hover{color:var(--tx2)}.tabs button.on{color:#fff;background:var(--ac);box-shadow:0 4px 14px var(--acg)}
 .pn{display:none;flex-direction:column;gap:8px}.pn.on{display:flex}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:16px}
+.card>*+*{padding-top:16px;border-top:1px solid var(--line)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px 20px}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.g3 .v{min-width:0;padding:0 4px}.g2>*,.g3>*{min-width:0}
+.ab .btn{width:100%;padding:14px;margin-top:6px;font-size:13px;color:#fff;border:none;border-radius:12px;background:linear-gradient(135deg,var(--ac),#5b3fe0);box-shadow:0 8px 22px var(--acg)}
 .s{display:flex;flex-direction:column;gap:6px}.sl{display:flex;justify-content:space-between}
 .l{font-size:12px;color:var(--tx2)}
 .v{font-size:12px;font-weight:700;color:var(--ac2);background:rgba(124,92,252,.12);padding:1px 8px;border-radius:6px;min-width:34px;text-align:center}
@@ -42,47 +45,54 @@ img{width:100%;image-rendering:pixelated;border-radius:8px;border:1px solid var(
 	inline constexpr const char* kBody = R"HTML(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bura</title><style>)HTML";
 
 	inline constexpr const char* kBody2 = R"HTML(</style></head><body><div class="wrap">
-<header class="hd"><div class="brand"><div class="logo">B</div><div><h1>Bura</h1><small>val - color tracking</small></div></div><div class="badge" id="bd"><i></i><span id="bt">Running</span></div></header>
-<nav class="tabs" id="tabs"><button class="on" data-t="aim">Aimbot</button><button data-t="trig">Trigger</button><button data-t="set">Settings</button><button data-t="dbg">Debug</button></nav>
-<div class="pn on" id="p-aim"></div><div class="pn" id="p-trig"></div><div class="pn" id="p-set"></div>
+<header class="hd"><div class="brand"><div class="logo">B</div><div><h1>Bura</h1><small>Configuration</small></div></div><div class="badge" id="bd"><i></i><span id="bt">Running</span></div></header>
+<nav class="tabs" id="tabs"><button class="on" data-t="aim">Aimbot</button><button data-t="trig">Trigger</button><button data-t="key">Keys</button><button data-t="inp">Input</button><button data-t="dbg">Debug</button></nav>
+<div class="pn on" id="p-aim"></div><div class="pn" id="p-trig"></div><div class="pn" id="p-key"></div><div class="pn" id="p-inp"></div>
 <div class="pn" id="p-dbg"><div class="card"><img id="pv" alt="preview"><pre id="di">...</pre></div></div>
+<div class="ab"><button class="btn" id="apply">Apply</button></div>
 </div><script>)HTML";
 
 	inline constexpr const char* kJs = R"JS(
 var $=function(i){return document.getElementById(i)},cfg=null,timers={};
-// [section,key,label,min,max,step] sliders; ['sec','key','label','bool'] toggles; selects below
-var SPEC={
- aim:[['aimbot','fov_x','Fov (X) px',20,250,1],['aimbot','fov_y','Fov (Y) px',20,250,1],['aimbot','offset_x','Offset (X) px',-15,15,1],['aimbot','offset_y','Offset (Y) px',-15,15,1],
-      ['aimbot','hold_pct','Hold % of head (0 = off)',0,150,1],['aimbot','lock_gain','Gain (counts/px)',0.1,5,0.05],['aimbot','smooth','Smooth (1 = snap)',0.1,1,0.05],['aimbot','lock_settle_ms','Settle ms',1,30,1],
-      ['aimbot','auto_aim','Auto aim (no bind)','bool']],
- trig:[['trigger','scan_area','Scan area px',1,30,1],['trigger','delay','Delay ms',1,300,1],['trigger','move_check','Move check','bool']]};
+var COLORS=['magenta','yellow','red'],MODES=['hold','toggle','auto'];
 function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}).then(function(r){return r.json()})}
-function send(sec,key,val){var o={};o[sec+'_']={};o[sec+'_'][key]=val;clearTimeout(timers[sec+key]);timers[sec+key]=setTimeout(function(){post('/api/config',o)},120)}
-function slider(sp){var w=document.createElement('div');w.className='s';var v=cfg[sp[0]+'_'][sp[1]];
- w.innerHTML='<div class="sl"><span class="l">'+sp[2]+'</span><span class="v"></span></div><input type="range" min="'+sp[3]+'" max="'+sp[4]+'" step="'+sp[5]+'">';
- var r=w.querySelector('input'),t=w.querySelector('.v');r.value=v;
- function up(){t.textContent=(+r.value).toFixed(sp[5]<1?2:0);r.style.setProperty('--p',((r.value-sp[3])/(sp[4]-sp[3])*100)+'%')}
- up();r.oninput=function(){up();send(sp[0],sp[1],+r.value)};return w}
-function toggle(sp){var w=document.createElement('div');w.className='t';w.innerHTML='<span class="l" style="color:var(--tx)">'+sp[2]+'</span><label class="sw"><input type="checkbox"><span class="dot"></span></label>';
- var c=w.querySelector('input');c.checked=!!cfg[sp[0]+'_'][sp[1]];c.onchange=function(){send(sp[0],sp[1],c.checked)};return w}
-function select(sec,key,label,opts){var w=document.createElement('div');w.className='s';w.innerHTML='<span class="l">'+label+'</span><select></select>';
- var s=w.querySelector('select');opts.forEach(function(o,i){var e=document.createElement('option');e.value=i;e.textContent=o;s.appendChild(e)});
- s.value=cfg[sec+'_'][key];s.onchange=function(){send(sec,key,+s.value)};return w}
-function bindRow(sec,label){var w=document.createElement('div');w.className='s';w.innerHTML='<span class="l">'+label+'</span><div class="row"><button class="btn"></button><select><option value="0">Hold</option><option value="1">Toggle</option></select></div>';
- var b=w.querySelector('button'),s=w.querySelector('select'),k=cfg[sec+'_'].bind;b.textContent=cfg._names[sec]||'Unbound';s.value=k.mode==='Toggle'?1:0;
+function send(sec,patch){var o={};o[sec+'_']=patch;var k=sec+Object.keys(patch)[0];clearTimeout(timers[k]);timers[k]=setTimeout(function(){post('/api/config',o)},120)}
+function el(h,c){var d=document.createElement('div');if(c)d.className=c;d.innerHTML=h;return d}
+function slider(sec,key,label,min,max,step){var w=el('<div class="sl"><span class="l">'+label+'</span><span class="v"></span></div><input type="range" min="'+min+'" max="'+max+'" step="'+step+'">','s');
+ var r=w.querySelector('input'),t=w.querySelector('.v');r.value=cfg[sec+'_'][key];
+ function up(){t.textContent=step<1?(+r.value).toFixed(2):r.value;r.style.setProperty('--p',((r.value-min)/(max-min)*100)+'%')}
+ up();r.oninput=function(){up();var p={};p[key]=+r.value;send(sec,p)};return w}
+function toggle(sec,key,label){var w=el('<span class="l" style="color:var(--tx)">'+label+'</span><label class="sw"><input type="checkbox"><span class="dot"></span></label>','t');
+ var c=w.querySelector('input');c.checked=!!cfg[sec+'_'][key];c.onchange=function(){var p={};p[key]=c.checked;send(sec,p)};return w}
+function select(label,opts,val,on){var w=el('<span class="l">'+label+'</span><select></select>','s');var s=w.querySelector('select');
+ opts.forEach(function(o,i){var e=document.createElement('option');e.value=i;e.textContent=o;s.appendChild(e)});s.value=val;s.onchange=function(){on(+s.value)};return w}
+function grp(cls,items){var g=el('',cls);items.forEach(function(i){g.appendChild(i)});return g}
+function bindRow(sec,label){var k=cfg[sec+'_'].bind,w=el('<span class="l">'+label+'</span><div class="row"><button class="btn"></button><select><option value="0">Hold</option><option value="1">Toggle</option></select></div>','s');
+ var b=w.querySelector('button'),s=w.querySelector('select');b.textContent=cfg._names[sec]||'Unbound';s.value=k.mode==='Toggle'?1:0;
  b.onclick=function(){b.textContent='press a key (Esc = clear)...';post('/api/bind',{name:sec}).then(function(r){b.textContent=r.name||'Unbound'})};
- s.onchange=function(){post('/api/config',{[sec+'_']:{bind_mode:+s.value}})};return w}
-function build(){['aim','trig','set'].forEach(function(t){var p=$('p-'+t);p.innerHTML='';var c=document.createElement('div');c.className='card';p.appendChild(c);
- if(t==='aim')c.appendChild(bindRow('aimbot','Aimbot bind'));if(t==='trig')c.appendChild(bindRow('trigger','Trigger bind'));
- (SPEC[t]||[]).forEach(function(sp){c.appendChild(sp[3]==='bool'?toggle(sp):slider(sp))});
- if(t==='set'){c.appendChild(select('settings','color','Target color',['Magenta (Tritanopia)','Yellow (Deuteranopia / Protanopia)','Red (Default)']));
-  c.appendChild(select('settings','input_backend','Input',['SendInput (local)','Makcu (serial)','Medius (capi dll)']));
-  var w=document.createElement('div');w.className='s';w.innerHTML='<span class="l">COM port</span><input type="text">';var i=w.querySelector('input');i.value=cfg.settings_.com_port;i.oninput=function(){send('settings','com_port',i.value)};c.appendChild(w);
-  var r=document.createElement('div');r.className='row';r.innerHTML='<button class="btn" id="ap">Apply input</button>';c.appendChild(r);
-  var st=document.createElement('pre');st.id='ms';c.appendChild(st);
-  $('ap').onclick=function(){post('/api/input/apply').then(function(x){st.textContent=x.status||''})}}})}
+ s.onchange=function(){send(sec,{bind_mode:+s.value})};return w}
+function mode(){var a=cfg.aimbot_;return a.auto_aim?2:(a.bind.mode==='Toggle'?1:0)}
+function build(){var A=cfg.aimbot_,P=$('p-aim'),c;
+ P.innerHTML='';c=el('','card');P.appendChild(c);
+ c.appendChild(grp('g2',[select('Color',COLORS,cfg.settings_.color,function(v){send('settings',{color:v})}),
+  select('Mode',MODES,mode(),function(v){send('aimbot',{auto_aim:v===2,bind_mode:v===1?1:0})})]));
+ c.appendChild(grp('g2',[slider('aimbot','fov_x','FOV X',20,250,1),slider('aimbot','fov_y','FOV Y',20,250,1)]));
+ c.appendChild(grp('g2',[slider('aimbot','lock_gain','Gain',0.1,5,0.05),slider('aimbot','smooth','Smooth',0.1,1,0.05)]));
+ c.appendChild(grp('g2',[slider('aimbot','hold_pct','Hold %',0,150,1),slider('aimbot','lock_settle_ms','Settle ms',1,30,1)]));
+ c.appendChild(grp('g3',[slider('aimbot','reaction_ms','Reaction ms',0,150,1),slider('aimbot','offset_x','X Offset',-15,15,1),slider('aimbot','offset_y','Y Offset',-15,15,1)]));
+ P=$('p-trig');P.innerHTML='';c=el('','card');P.appendChild(c);
+ c.appendChild(grp('g2',[slider('trigger','scan_area','Scan area',1,30,1),slider('trigger','delay','Delay ms',1,300,1)]));
+ c.appendChild(grp('tl',[toggle('trigger','move_check','Move check')]));
+ P=$('p-key');P.innerHTML='';c=el('','card');P.appendChild(c);
+ c.appendChild(bindRow('aimbot','Aimbot bind'));c.appendChild(bindRow('trigger','Trigger bind'));
+ P=$('p-inp');P.innerHTML='';c=el('','card');P.appendChild(c);
+ c.appendChild(select('Input',['SendInput (local)','Makcu (serial)','Medius (capi dll)'],cfg.settings_.input_backend,function(v){send('settings',{input_backend:v})}));
+ var w=el('<span class="l">COM port</span><input type="text">','s'),i=w.querySelector('input');i.value=cfg.settings_.com_port;i.oninput=function(){send('settings',{com_port:i.value})};c.appendChild(w);
+ var st=el('','');st.innerHTML='<div class="row"><button class="btn" id="ap">Apply input</button></div><pre id="ms" style="margin-top:10px"></pre>';c.appendChild(st);$('ms').textContent=cfg._mouse||'';
+ $('ap').onclick=function(){post('/api/input/apply').then(function(x){$('ms').textContent=x.status||''})}}
 document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){document.querySelectorAll('#tabs button,.pn').forEach(function(e){e.classList.remove('on')});b.classList.add('on');$('p-'+b.dataset.t).classList.add('on')}});
-function load(){return fetch('/api/config').then(function(r){return r.json()}).then(function(j){cfg=j;build();$('ms')&&($('ms').textContent=j._mouse||'')})}
+$('apply').onclick=function(){var b=$('apply');post('/api/input/apply').then(function(x){b.textContent='Applied';setTimeout(function(){b.textContent='Apply'},900)})};
+function load(){return fetch('/api/config').then(function(r){return r.json()}).then(function(j){cfg=j;build()})}
 function dbg(){if(!$('p-dbg').classList.contains('on'))return;fetch('/api/debug').then(function(r){return r.json()}).then(function(d){
  $('di').textContent=['captured : '+d.captured,'frame    : '+d.cap_w+'x'+d.cap_h,'lit px   : '+d.lit,'blobs    : '+d.big_blobs+' / '+d.blobs,'found    : '+d.found,'on target: '+d.on_target,'aim/trig : '+d.aim_active+' / '+d.trigger_active,'dist     : '+d.dist.toFixed(1),'mean BGR : '+d.mean_bgr.join(','),'ctr HSV  : '+d.center_hsv.join(','),'frames   : '+d.frames].join('\n');
  $('pv').src='/api/preview.png?'+Date.now()}).catch(function(){})}

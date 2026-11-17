@@ -61,8 +61,11 @@ namespace Core
 			float lock_gain            = 1.f;
 			std::int32_t lock_settle_ms = 10;
 
+			// delay before the first correction on a fresh target, 0-150ms (+-25% random). 0 = react instantly
+			std::int32_t reaction_ms = 30;
+
 			NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT( Aimbot, bind, fov_x, fov_y, offset_x, offset_y, hold_pct, smooth, auto_aim,
-			                                              lock, lock_gain, lock_settle_ms )
+			                                              lock, lock_gain, lock_settle_ms, reaction_ms )
 		} aimbot_;
 
 		struct Trigger

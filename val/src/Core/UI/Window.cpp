@@ -386,6 +386,9 @@ namespace Core::UI
 					ImGui::Text( "Smooth (1 = snap)" );
 					ImGui::SliderFloat( "##smooth", &config->aimbot_.smooth, 0.1f, 1.f, "%.2f" );
 
+					ImGui::Text( "Reaction delay" );
+					ImGui::SliderInt( "##reaction", &config->aimbot_.reaction_ms, 0, 150, "%dms" );
+
 					ImGui::Text( "Settle" );
 					ImGui::SliderInt( "##lock_settle", &config->aimbot_.lock_settle_ms, 1, 30, "%dms" );
 
