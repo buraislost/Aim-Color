@@ -247,7 +247,7 @@ namespace Core::Features
 			// human-ish reaction time before the first correction on a fresh target
 			acquired_      = true;
 			acquired_at_   = now;
-			reaction_ms_   = rand_real( 70.0, 130.0 );
+			reaction_ms_   = rand_real( 20.0, 40.0 );
 		}
 
 		if ( aim_active && !holding_ )
@@ -300,7 +300,7 @@ namespace Core::Features
 	//  - the error is measured against where the crosshair WILL be: corrections sent in the last PENDING_MS
 	//    are not on screen yet, counting them again was the overshoot / shake
 	//  - the step eases out near the head (EASE_MIN at the aim point, full gain from 1.5 heads away)
-	//  - +-10% random on each step, and a 70-130ms reaction before the first one, so it does not look scripted
+	//  - +-10% random on each step, and a 20-40ms reaction before the first one, so it does not look scripted
 	//  - fractions of a count are carried over, small errors close smoothly instead of flipping between 0 and 1
 	// counts = error * gain * smooth * ease; gain converts screen px to mouse counts (depends on in-game sens).
 	void ColorBot::aim( const cv::Point2d& delta, const double head_h, const double px_scale )
