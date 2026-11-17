@@ -2,6 +2,8 @@
 
 #include "Core/BindSystem/KeyBind.hpp"
 
+#include <filesystem>
+
 NLOHMANN_JSON_SERIALIZE_ENUM
 (
 	Core::KeyMode,
@@ -33,6 +35,11 @@ namespace Core
 	public:
 		[[nodiscard]] std::string export_to_str( ) const;
 		[[nodiscard]] bool import_from_str( const std::string& );
+
+		// plain JSON next to the exe (bura_config.json). ImGui and the web UI edit this same object, both are saved here
+		[[nodiscard]] static std::filesystem::path file_path( );
+		bool save_file( ) const;
+		bool load_file( );
 
 		// every field is serialized; WITH_DEFAULT keeps configs exported by older builds loadable
 		struct Aimbot

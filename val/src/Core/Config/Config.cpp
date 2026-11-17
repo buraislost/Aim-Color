@@ -3,6 +3,9 @@
 #include "Stdafx.hpp"
 #include "Core/Config/Config.hpp"
 
+#include <filesystem>
+#include <fstream>
+
 namespace Core
 {
 	std::string Config::export_to_str( ) const
@@ -43,6 +46,58 @@ namespace Core
 			return true;
 		}
 		catch ( const std::exception& e )
+		{
+			return false;
+		}
+	}
+
+	std::filesystem::path Config::file_path( )
+	{
+		wchar_t buf[ MAX_PATH ] {};
+		GetModuleFileNameW( nullptr, buf, MAX_PATH );
+		return std::filesystem::path( buf ).replace_filename( L"bura_config.json" );
+	}
+
+	bool Config::save_file( ) const
+	{
+		try
+		{
+			const auto path = file_path( );
+			auto tmp        = path;
+			tmp += L".tmp";
+
+			{
+				std::ofstream out( tmp, std::ios::binary | std::ios::trunc );
+
+				if ( !out )
+					return false;
+
+				const json j = *this;
+				out << j.dump( 2 );
+			}
+
+			std::filesystem::rename( tmp, path ); // replaces atomically enough for a settings file
+			return true;
+		}
+		catch ( const std::exception& )
+		{
+			return false;
+		}
+	}
+
+	bool Config::load_file( )
+	{
+		try
+		{
+			std::ifstream in( file_path( ), std::ios::binary );
+
+			if ( !in )
+				return false;
+
+			json::parse( in ).get_to( *this );
+			return true;
+		}
+		catch ( const std::exception& )
 		{
 			return false;
 		}

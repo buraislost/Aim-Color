@@ -6,6 +6,8 @@
 #include "Core/Features/DebugState.hpp"
 
 #include <shellapi.h>
+#include <chrono>
+#include <string>
 
 namespace Core::UI
 {
@@ -178,8 +180,116 @@ namespace Core::UI
 		c[ ImGuiCol_ScrollbarGrab ] = tok::line2;
 	}
 
+	namespace
+	{
+		constexpr UINT kTrayMsg = WM_APP + 1;
+		constexpr wchar_t kClassName[ ] = L"BuraWindow";
+	}
+
+	Window::Window( const std::wstring& title, const ImVec2 size, ServiceHub& service_hub )
+		: size_( size ),
+		  offset_( 0, 0 ),
+		  service_hub_( &service_hub )
+	{
+		wc_ =
+		{
+			.cbSize = sizeof( wc_ ),
+			.style = CS_HREDRAW | CS_VREDRAW,
+			.lpfnWndProc = wnd_proc,
+			.hInstance = GetModuleHandleA( nullptr ),
+			.hCursor = LoadCursor( nullptr, IDC_ARROW ),
+			.lpszClassName = kClassName,
+		};
+
+		if ( !RegisterClassExW( &wc_ ) )
+			throw std::runtime_error( "Failed to register window class." );
+
+		const ImVec2 screen_center
+		{
+			GetSystemMetrics( SM_CXSCREEN ) / 2 - size_.x / 2,
+			GetSystemMetrics( SM_CYSCREEN ) / 2 - size_.y / 2
+		};
+
+		hwnd_ = CreateWindow
+		(
+			wc_.lpszClassName,
+			title.c_str( ),
+			WS_POPUP | WS_VISIBLE,
+			static_cast<int>( screen_center.x ),
+			static_cast<int>( screen_center.y ),
+			static_cast<int>( size_.x ),
+			static_cast<int>( size_.y ),
+			nullptr,
+			nullptr,
+			wc_.hInstance,
+			this
+		);
+
+		if ( !hwnd_ )
+			throw std::runtime_error( "Failed to create window." );
+
+		d3d_device_ = std::make_shared<D3D11Device>( hwnd_ );
+
+		initialize_imgui( );
+
+		ShowWindow( hwnd_, SW_SHOWDEFAULT );
+		UpdateWindow( hwnd_ );
+	}
+
+	void Window::hide_to_tray( )
+	{
+		if ( in_tray_ )
+			return;
+
+		nid_                  = {};
+		nid_.cbSize           = sizeof( nid_ );
+		nid_.hWnd             = hwnd_;
+		nid_.uID              = 1;
+		nid_.uFlags           = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+		nid_.uCallbackMessage = kTrayMsg;
+		nid_.hIcon            = LoadIconW( nullptr, IDI_APPLICATION );
+		wcscpy_s( nid_.szTip, L"Bura" );
+
+		Shell_NotifyIconW( NIM_ADD, &nid_ );
+		ShowWindow( hwnd_, SW_HIDE );
+		in_tray_ = true;
+	}
+
+	void Window::restore_from_tray( )
+	{
+		if ( !in_tray_ )
+			return;
+
+		Shell_NotifyIconW( NIM_DELETE, &nid_ );
+		ShowWindow( hwnd_, SW_SHOW );
+		SetForegroundWindow( hwnd_ );
+		in_tray_ = false;
+	}
+
+	void Window::show_tray_menu( )
+	{
+		POINT pt {};
+		GetCursorPos( &pt );
+
+		const HMENU menu = CreatePopupMenu( );
+		AppendMenuW( menu, MF_STRING, 1, L"Show Bura" );
+		AppendMenuW( menu, MF_STRING, 2, L"Quit" );
+
+		SetForegroundWindow( hwnd_ ); // required, or the menu does not close when clicking elsewhere
+		const int cmd = TrackPopupMenu( menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd_, nullptr );
+		DestroyMenu( menu );
+
+		if ( cmd == 1 )
+			restore_from_tray( );
+		else if ( cmd == 2 )
+			running_ = false;
+	}
+
 	Window::~Window( )
 	{
+		if ( in_tray_ )
+			Shell_NotifyIconW( NIM_DELETE, &nid_ );
+
 		shutdown_imgui( );
 
 		if ( hwnd_ )
@@ -372,6 +482,10 @@ namespace Core::UI
 		char com_buf[ 16 ] = {};
 		strncpy_s( com_buf, config->settings_.com_port.c_str( ), _TRUNCATE );
 
+		// every change made in ImGui or the web UI is written to bura_config.json within ~1s
+		std::string saved_json = nlohmann::json( *config ).dump( );
+		auto last_save_check   = std::chrono::steady_clock::now( );
+
 		while ( running_ )
 		{
 			if ( PeekMessageA( &msg, nullptr, 0U, 0U, PM_REMOVE ) )
@@ -381,6 +495,23 @@ namespace Core::UI
 
 				if ( msg.message == WM_QUIT )
 					running_ = false;
+			}
+
+			if ( const auto t = std::chrono::steady_clock::now( ); t - last_save_check > std::chrono::seconds( 1 ) )
+			{
+				last_save_check = t;
+
+				if ( std::string cur = nlohmann::json( *config ).dump( ); cur != saved_json )
+				{
+					config->save_file( );
+					saved_json = std::move( cur );
+				}
+			}
+
+			if ( in_tray_ )
+			{
+				Sleep( 40 ); // hidden: no rendering, the aim and web threads keep running
+				continue;
 			}
 
 			if ( ImGui::IsMouseClicked( ImGuiMouseButton_Left ) )
@@ -420,13 +551,17 @@ namespace Core::UI
 			ImGui_ImplWin32_NewFrame( );
 			ImGui::NewFrame( );
 
+			// the web UI may have changed the COM port: follow it unless the field is being edited
+			if ( !ImGui::IsAnyItemActive( ) )
+				strncpy_s( com_buf, config->settings_.com_port.c_str( ), _TRUNCATE );
+
 			ImGui::SetNextWindowSize( size_ );
 			ImGui::SetNextWindowPos( { 0.f, 0.f } );
 
 			constexpr auto flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
 			                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
-			ImGui::Begin( "gamerdoc lixo", nullptr, flags );
+			ImGui::Begin( "Bura", nullptr, flags );
 
 			// the debug tab turns this back on every frame it is visible
 			service_hub_->get<DebugState>( )->enabled = false;
@@ -467,7 +602,7 @@ namespace Core::UI
 				ImGui::PushStyleColor( ImGuiCol_ButtonHovered, tok::bad );
 
 				if ( ImGui::Button( "x", { 26.f, 26.f } ) )
-					close( );
+					close_prompt_ = true;
 
 				ImGui::PopStyleColor( );
 
@@ -594,6 +729,34 @@ namespace Core::UI
 			// ---- footer ----
 			ImGui::TextColored( tok::tx3, "Input: %s", mouse->status( ).c_str( ) );
 
+			// ---- close prompt ----
+			if ( close_prompt_.exchange( false ) )
+				ImGui::OpenPopup( "Close Bura" );
+
+			ImGui::SetNextWindowPos( { size_.x * 0.5f, size_.y * 0.5f }, ImGuiCond_Always, { 0.5f, 0.5f } );
+
+			if ( ImGui::BeginPopupModal( "Close Bura", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove ) )
+			{
+				ImGui::TextColored( tok::tx2, "Keep Bura running in the system tray?" );
+				ImGui::Dummy( { 0.f, 4.f } );
+
+				if ( ui::accent_button( "Minimize to tray", { 200.f, 30.f } ) )
+				{
+					ImGui::CloseCurrentPopup( );
+					hide_to_tray( );
+				}
+
+				if ( ImGui::Button( "Quit", { 98.f, 28.f } ) )
+					close( );
+
+				ImGui::SameLine( 0.f, tok::gap );
+
+				if ( ImGui::Button( "Cancel", { 98.f, 28.f } ) )
+					ImGui::CloseCurrentPopup( );
+
+				ImGui::EndPopup( );
+			}
+
 			ImGui::End( );
 
 			ImGui::Render( );
@@ -607,6 +770,8 @@ namespace Core::UI
 			ImGui_ImplDX11_RenderDrawData( ImGui::GetDrawData( ) );
 			d3d_device_->get_swap_chain( )->Present( 1, 0 );
 		}
+
+		config->save_file( );
 	}
 
 	LRESULT CALLBACK Window::wnd_proc( const HWND hwnd, const UINT msg, const WPARAM wparam, const LPARAM lparam )
@@ -614,11 +779,29 @@ namespace Core::UI
 		if ( ImGui_ImplWin32_WndProcHandler( hwnd, msg, wparam, lparam ) )
 			return true;
 
+		if ( msg == WM_NCCREATE )
+			SetWindowLongPtrW( hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>( reinterpret_cast<CREATESTRUCTW*>( lparam )->lpCreateParams ) );
+
+		auto* self = reinterpret_cast<Window*>( GetWindowLongPtrW( hwnd, GWLP_USERDATA ) );
+
 		switch ( msg )
 		{
-			case WM_CLOSE:
+			case kTrayMsg:
 			{
-				PostQuitMessage( 0 );
+				if ( self && ( LOWORD( lparam ) == WM_LBUTTONUP || LOWORD( lparam ) == WM_LBUTTONDBLCLK ) )
+					self->restore_from_tray( );
+				else if ( self && LOWORD( lparam ) == WM_RBUTTONUP )
+					self->show_tray_menu( );
+
+				return 0;
+			}
+			case WM_CLOSE: // Alt+F4 / taskbar close: ask instead of quitting
+			{
+				if ( self )
+					self->request_close( );
+				else
+					PostQuitMessage( 0 );
+
 				return 0;
 			}
 			case WM_DESTROY:

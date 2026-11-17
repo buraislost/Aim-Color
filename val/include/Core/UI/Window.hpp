@@ -2,6 +2,8 @@
 
 #include "Core/UI/D3D11Device.hpp"
 
+#include <shellapi.h>
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
 
 namespace Core::UI
@@ -17,6 +19,9 @@ namespace Core::UI
 
 		void run( );
 		void close( );
+
+		// closing asks: minimize to tray / quit / cancel
+		void request_close( ) { close_prompt_ = true; }
 
 	private:
 		void initialize_imgui( ) const;
@@ -41,6 +46,14 @@ namespace Core::UI
 		void render_debug_tab( );
 
 		ServiceHub* service_hub_ = nullptr;
+
+		// tray
+		void hide_to_tray( );
+		void restore_from_tray( );
+		void show_tray_menu( );
+		NOTIFYICONDATAW nid_ {};
+		bool in_tray_ = false;
+		std::atomic<bool> close_prompt_ = false;
 
 		std::atomic<bool> running_ = true;
 	};

@@ -48,6 +48,7 @@ public:
 
 			const auto config = std::make_shared<Core::Config>( );
 			service_hub_->register_service( config );
+			config->load_file( ); // saved settings from last run (edited in ImGui or the web UI)
 
 			// apply the saved backend at startup, not only when "Apply input" is pressed
 			mouse->configure( config->settings_.input_backend, config->settings_.com_port );
@@ -65,7 +66,7 @@ public:
 
 			const auto window = std::make_shared<Core::UI::Window>
 			(
-				L" ",
+				L"Bura",
 				ImVec2( 450.f, 640.f ),
 				*service_hub_
 			);
