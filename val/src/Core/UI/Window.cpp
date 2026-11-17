@@ -253,17 +253,51 @@ namespace Core::UI
 
 	void Window::draw_ui( )
 	{
+		service_hub_->get<DebugState>( )->enabled = false; // the Debug tab turns it back on while visible
+		refresh_connection( );
+
+		if ( screen_ == Screen::Launcher ) {
+			draw_launcher( );
+		}
+		else {
+			draw_menu( );
+		}
+
+		switch ( panel::close_prompt( close_prompt_.exchange( false ) ) ) {
+			case panel::CloseChoice::Tray: hide_to_tray( ); break;
+			case panel::CloseChoice::Quit: close( ); break;
+			case panel::CloseChoice::None: break;
+		}
+	}
+
+	void Window::draw_launcher( )
+	{
+		const auto mouse = service_hub_->get<Mouse>( );
+		const auto r     = panel::launcher( connected_, *mouse );
+
+		if ( r.close_clicked ) {
+			close_prompt_ = true;
+		}
+
+		if ( r.open_menu ) {
+			screen_ = Screen::Menu;
+		}
+	}
+
+	void Window::draw_menu( )
+	{
 		const auto mouse = service_hub_->get<Mouse>( );
 		static int tab   = 0;
 		static const char* const tab_names[ ] = { "Aimbot", "Trigger", "Debug", "Settings" };
 
-		service_hub_->get<DebugState>( )->enabled = false; // the Debug tab turns it back on while visible
-		refresh_connection( );
-
-		const auto header = panel::header( connected_ );
+		const auto header = panel::header( connected_, true );
 
 		if ( header.close_clicked ) {
 			close_prompt_ = true;
+		}
+
+		if ( header.home_clicked ) {
+			screen_ = Screen::Launcher;
 		}
 
 		if ( header.web_clicked ) {
@@ -277,12 +311,6 @@ namespace Core::UI
 		ImGui::EndChild( );
 
 		panel::footer( *mouse );
-
-		switch ( panel::close_prompt( close_prompt_.exchange( false ) ) ) {
-			case panel::CloseChoice::Tray: hide_to_tray( ); break;
-			case panel::CloseChoice::Quit: close( ); break;
-			case panel::CloseChoice::None: break;
-		}
 	}
 
 	void Window::draw_tab_body( const int tab )

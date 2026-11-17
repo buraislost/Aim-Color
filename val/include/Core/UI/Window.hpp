@@ -41,6 +41,8 @@ namespace Core::UI
 		void drag_window( );
 		void render_frame( );
 		void draw_ui( );
+		void draw_launcher( );
+		void draw_menu( );
 		void draw_tab_body( int tab );
 		void present( );
 		void refresh_connection( );
@@ -70,6 +72,9 @@ namespace Core::UI
 
 		NOTIFYICONDATAW nid_ {};
 		bool in_tray_ = false;
+
+		enum class Screen { Launcher, Menu };
+		Screen screen_ = Screen::Launcher;
 
 		char com_buf_[ 16 ] = {};
 		bool connected_     = false;

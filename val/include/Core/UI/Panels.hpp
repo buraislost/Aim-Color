@@ -13,6 +13,13 @@ namespace Core::UI::panel
 	{
 		bool close_clicked = false;
 		bool web_clicked   = false;
+		bool home_clicked  = false;
+	};
+
+	struct LauncherResult
+	{
+		bool close_clicked = false;
+		bool open_menu     = false;
 	};
 
 	enum class CloseChoice
@@ -23,7 +30,8 @@ namespace Core::UI::panel
 	};
 
 	// Command-like: draw functions, state lives in Config / Mouse
-	HeaderResult header( bool connected );
+	HeaderResult header( bool connected, bool show_home );
+	LauncherResult launcher( bool connected, const Mouse& mouse );
 	void aimbot( Config& config, const BindSystem& binds );
 	void trigger( Config& config, const BindSystem& binds );
 	void settings( Config& config, Mouse& mouse, char* com_buf );

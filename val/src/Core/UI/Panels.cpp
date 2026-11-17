@@ -20,15 +20,22 @@ namespace Core::UI::panel
 		constexpr float kHeaderButton = th::kRowHeight;
 		constexpr float kWebButtonW   = 48.f;
 		constexpr float kClosePopupW  = 208.f;
+		constexpr float kLauncherLogo    = 64.f;
+		constexpr float kLauncherBtnW    = 280.f;
+		constexpr float kLauncherBtnH    = 48.f;
+		constexpr float kLauncherLogoY   = 160.f;
+		constexpr float kLauncherTitleY  = 248.f;
+		constexpr float kLauncherStatusY = 312.f;
+		constexpr float kLauncherButtonY = 400.f;
 
 		// ===== Internal helpers =====
-		void draw_logo( const ImVec2 pos )
+		void draw_logo( const ImVec2 pos, const float size )
 		{
 			auto* dl = ImGui::GetWindowDrawList( );
-			dl->AddRectFilled( pos, pos + ImVec2( th::kLogoSize, th::kLogoSize ), ImGui::GetColorU32( th::kAccent ), th::kRadius );
+			dl->AddRectFilled( pos, pos + ImVec2( size, size ), ImGui::GetColorU32( th::kAccent ), th::kRadius );
 
 			const ImVec2 glyph = ImGui::CalcTextSize( "B" );
-			dl->AddText( { pos.x + ( th::kLogoSize - glyph.x ) * 0.5f, pos.y + ( th::kLogoSize - glyph.y ) * 0.5f },
+			dl->AddText( { pos.x + ( size - glyph.x ) * 0.5f, pos.y + ( size - glyph.y ) * 0.5f },
 			             IM_COL32_WHITE, "B" );
 		}
 
@@ -127,6 +134,29 @@ namespace Core::UI::panel
 			wd::toggle( "Y axis", &ab.y_axis, cell );
 		}
 
+		void center_text( const char* text, const ImVec4& color )
+		{
+			const float w = ImGui::CalcTextSize( text ).x;
+			ImGui::SetCursorPosX( ( ImGui::GetWindowWidth( ) - w ) * 0.5f );
+			ImGui::TextColored( color, "%s", text );
+		}
+
+		void center_logo( )
+		{
+			ImGui::SetCursorPos( { ( ImGui::GetWindowWidth( ) - kLauncherLogo ) * 0.5f, kLauncherLogoY } );
+			draw_logo( ImGui::GetCursorScreenPos( ), kLauncherLogo );
+			ImGui::Dummy( { kLauncherLogo, kLauncherLogo } );
+		}
+
+		void center_title( )
+		{
+			ImGui::SetCursorPosY( kLauncherTitleY );
+			ImGui::SetWindowFontScale( th::kTitleScale );
+			center_text( "Bura", th::kText );
+			ImGui::SetWindowFontScale( 1.f );
+			center_text( "color tracking", th::kMuted );
+		}
+
 		void config_buttons( Config& config, Mouse& mouse, char* com_buf )
 		{
 			const float cell = wd::half_width( );
@@ -152,7 +182,7 @@ namespace Core::UI::panel
 	}
 
 	// ===== Public API =====
-	HeaderResult header( const bool connected )
+	HeaderResult header( const bool connected, const bool show_home )
 	{
 		HeaderResult out;
 		const float width = ImGui::GetWindowWidth( );
@@ -160,7 +190,7 @@ namespace Core::UI::panel
 		const ImVec2 pos  = ImGui::GetCursorScreenPos( );
 		float right       = width - th::kSpace3;
 
-		draw_logo( pos );
+		draw_logo( pos, th::kLogoSize );
 		draw_title( { pos.x + th::kLogoSize + th::kSpace2, pos.y } );
 
 		right -= kHeaderButton;
@@ -173,6 +203,12 @@ namespace Core::UI::panel
 			right -= th::kSpace2 + kWebButtonW;
 			ImGui::SetCursorPos( { right, y } );
 			out.web_clicked = ImGui::Button( "Web", { kWebButtonW, kHeaderButton } );
+		}
+
+		if ( show_home ) {
+			right -= th::kSpace2 + kWebButtonW;
+			ImGui::SetCursorPos( { right, y } );
+			out.home_clicked = ImGui::Button( "Home", { kWebButtonW, kHeaderButton } );
 		}
 
 		draw_status( connected, right - th::kSpace3, y );
@@ -224,6 +260,31 @@ namespace Core::UI::panel
 
 		wd::section( "CONFIG" );
 		config_buttons( config, mouse, com_buf );
+	}
+
+	// cover screen shown first: big logo, status and one button into the menu
+	LauncherResult launcher( const bool connected, const Mouse& mouse )
+	{
+		LauncherResult out;
+		const float w = ImGui::GetWindowWidth( );
+		const float h = ImGui::GetWindowHeight( );
+
+		ImGui::SetCursorPos( { w - th::kSpace3 - th::kRowHeight, th::kSpace3 } );
+		ImGui::PushStyleColor( ImGuiCol_ButtonHovered, th::kBad );
+		out.close_clicked = ImGui::Button( "x", { th::kRowHeight, th::kRowHeight } );
+		ImGui::PopStyleColor( );
+
+		center_logo( );
+		center_title( );
+		ImGui::SetCursorPosY( kLauncherStatusY );
+		center_text( connected ? "Connected" : "No input", connected ? th::kOk : th::kBad );
+
+		ImGui::SetCursorPos( { ( w - kLauncherBtnW ) * 0.5f, kLauncherButtonY } );
+		out.open_menu = wd::accent_button( "Open menu", { kLauncherBtnW, kLauncherBtnH } );
+
+		ImGui::SetCursorPos( { th::kSpace3, h - th::kSpace3 - th::kRowHeight } );
+		ImGui::TextColored( th::kMuted, "Input: %s", mouse.status( ).c_str( ) );
+		return out;
 	}
 
 	void footer( const Mouse& mouse )
