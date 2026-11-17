@@ -5,6 +5,7 @@
 #include "Core/Features/DebugState.hpp"
 #include "Core/Mouse/Mouse.hpp"
 #include "Core/UI/Window.hpp"
+#include "Core/Web/WebGui.hpp"
 
 #include <timeapi.h>
 
@@ -55,6 +56,12 @@ public:
 
 			const auto bind_system = std::make_shared<Core::BindSystem>( );
 			service_hub_->register_service( bind_system );
+
+			// browser UI, loopback only. a busy port just means no web UI, the ImGui window still works
+			std::unique_ptr<Core::Web::WebGui> web;
+
+			try { web = std::make_unique<Core::Web::WebGui>( *service_hub_ ); }
+			catch ( ... ) { }
 
 			const auto window = std::make_shared<Core::UI::Window>
 			(

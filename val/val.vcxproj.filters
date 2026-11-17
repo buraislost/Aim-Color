@@ -9,6 +9,7 @@
     <ClCompile Include="src\Core\UI\Window.cpp" />
     <ClCompile Include="src\Core\BindSystem\BindSystem.cpp" />
     <ClCompile Include="src\Core\Mouse\Mouse.cpp" />
+    <ClCompile Include="src\Core\Web\WebGui.cpp" />
     <ClCompile Include="src\Core\Features\ColorBot.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -19,6 +20,8 @@
     <ClInclude Include="include\Utility\String.hpp" />
     <ClInclude Include="include\Core\UI\D3D11Device.hpp" />
     <ClInclude Include="include\Core\UI\Window.hpp" />
+    <ClInclude Include="include\Core\Web\WebGui.hpp" />
+    <ClInclude Include="include\Core\Web\WebPage.hpp" />
     <ClInclude Include="include\Core\BindSystem\BindSystem.hpp" />
     <ClInclude Include="include\Core\BindSystem\KeyBind.hpp" />
     <ClInclude Include="include\Core\Mouse\Mouse.hpp" />

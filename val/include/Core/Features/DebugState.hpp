@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 
@@ -37,6 +38,17 @@ namespace Core
 		};
 
 		std::atomic<bool> enabled { false };
+
+		// the web UI keeps the debug work alive for a few seconds after each poll
+		std::atomic<std::int64_t> web_until_ms { 0 };
+
+		static std::int64_t now_ms( )
+		{
+			return std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now( ).time_since_epoch( ) ).count( );
+		}
+
+		void web_touch( ) { web_until_ms = now_ms( ) + 3000; }
+		[[nodiscard]] bool wanted( ) const { return enabled || now_ms( ) < web_until_ms; }
 
 		void publish( const Info& info, const cv::Mat& preview_rgba )
 		{

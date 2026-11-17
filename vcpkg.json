@@ -8,6 +8,7 @@
         "win32-binding"
       ]
     },
+    "cpp-httplib",
     "nlohmann-json",
     "opencv4"
   ]

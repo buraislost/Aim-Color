@@ -47,7 +47,7 @@ namespace Core::Features
 
 		// debug view on: keep scanning while idle so detection can be inspected without holding a bind.
 		// nothing below moves the mouse or clicks unless aim_active / trigger_active is set.
-		const bool debug = debug_ && debug_->enabled;
+		const bool debug = debug_ && debug_->wanted( );
 
 		// nothing armed: skip capture + CV entirely
 		if ( !aim_active && !trigger_active && !debug )
