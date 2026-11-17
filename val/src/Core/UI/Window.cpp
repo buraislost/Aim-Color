@@ -10,93 +10,172 @@
 namespace Core::UI
 {
 
-	// Bura web UI look: dark violet palette, 12px rounded cards, pill tabs, violet sliders
+	// ---- design tokens (one place to retheme) ----
+	namespace tok
+	{
+		constexpr float label_w = 104.f; // label column of every setting row
+		constexpr float row_h   = 26.f;
+		constexpr float gap     = 8.f;
+
+		inline ImVec4 rgb( int r, int g, int b, float a = 1.f ) { return ImVec4( r / 255.f, g / 255.f, b / 255.f, a ); }
+
+		inline const ImVec4 bg = rgb( 11, 11, 16 ), panel = rgb( 18, 18, 26 ), card = rgb( 23, 23, 34 ), card2 = rgb( 28, 28, 42 );
+		inline const ImVec4 line = rgb( 38, 38, 54 ), line2 = rgb( 49, 49, 74 );
+		inline const ImVec4 tx = rgb( 232, 232, 242 ), tx2 = rgb( 154, 154, 180 ), tx3 = rgb( 95, 95, 122 );
+		inline const ImVec4 ac = rgb( 124, 92, 252 ), ac2 = rgb( 164, 139, 255 );
+		inline const ImVec4 ok = rgb( 61, 220, 151 ), bad = rgb( 229, 72, 77 );
+	}
+
+	// ---- components ----
+	namespace ui
+	{
+		inline void section( const char* title )
+		{
+			ImGui::Dummy( { 0.f, 2.f } );
+			ImGui::PushStyleColor( ImGuiCol_Text, tok::tx3 );
+			ImGui::TextUnformatted( title );
+			ImGui::PopStyleColor( );
+			ImGui::Dummy( { 0.f, 0.f } );
+		}
+
+		// left label column, then the control takes the rest of the row
+		inline void label( const char* text )
+		{
+			ImGui::AlignTextToFramePadding( );
+			ImGui::TextColored( tok::tx2, "%s", text );
+			ImGui::SameLine( tok::label_w );
+		}
+
+		inline void slider_i( const char* name, std::int32_t* v, int lo, int hi, const char* fmt = "%d" )
+		{
+			label( name );
+			ImGui::PushID( name );
+			ImGui::SetNextItemWidth( -1.f );
+			ImGui::SliderInt( "##v", v, lo, hi, fmt );
+			ImGui::PopID( );
+		}
+
+		// two sliders sharing one labelled row, value formats carry the axis ("X %dpx" / "Y %dpx")
+		inline void pair_i( const char* name, std::int32_t* a, const char* fa, std::int32_t* b, const char* fb, int lo, int hi )
+		{
+			label( name );
+			ImGui::PushID( name );
+			const float w = ( ImGui::GetContentRegionAvail( ).x - tok::gap ) * 0.5f;
+			ImGui::SetNextItemWidth( w );
+			ImGui::SliderInt( "##a", a, lo, hi, fa );
+			ImGui::SameLine( 0.f, tok::gap );
+			ImGui::SetNextItemWidth( w );
+			ImGui::SliderInt( "##b", b, lo, hi, fb );
+			ImGui::PopID( );
+		}
+
+		inline void pair_f( const char* name, float* a, const char* fa, float* b, const char* fb, float lo, float hi )
+		{
+			label( name );
+			ImGui::PushID( name );
+			const float w = ( ImGui::GetContentRegionAvail( ).x - tok::gap ) * 0.5f;
+			ImGui::SetNextItemWidth( w );
+			ImGui::SliderFloat( "##a", a, lo, hi, fa );
+			ImGui::SameLine( 0.f, tok::gap );
+			ImGui::SetNextItemWidth( w );
+			ImGui::SliderFloat( "##b", b, lo, hi, fb );
+			ImGui::PopID( );
+		}
+
+		inline bool combo( const char* name, std::int32_t* v, const char* const* items, int n )
+		{
+			label( name );
+			ImGui::PushID( name );
+			ImGui::SetNextItemWidth( -1.f );
+			const bool changed = ImGui::Combo( "##v", v, items, n );
+			ImGui::PopID( );
+			return changed;
+		}
+
+		// switch cell: label left, pill switch right. `w` = cell width (0 = fill the row)
+		inline void toggle( const char* name, bool* v, float w = 0.f )
+		{
+			if ( w <= 0.f )
+				w = ImGui::GetContentRegionAvail( ).x;
+
+			ImGui::PushID( name );
+			const ImVec2 p = ImGui::GetCursorScreenPos( );
+			const ImVec2 sz { w, tok::row_h };
+
+			if ( ImGui::InvisibleButton( "##t", sz ) )
+				*v = !*v;
+
+			auto* dl        = ImGui::GetWindowDrawList( );
+			const bool hot  = ImGui::IsItemHovered( );
+			dl->AddRectFilled( p, p + sz, ImGui::GetColorU32( hot ? tok::line2 : tok::card2 ), 6.f );
+			dl->AddText( { p.x + 10.f, p.y + ( sz.y - ImGui::GetTextLineHeight( ) ) * 0.5f }, ImGui::GetColorU32( tok::tx ), name );
+
+			const ImVec2 sw0 { p.x + sz.x - 40.f, p.y + ( sz.y - 14.f ) * 0.5f };
+			dl->AddRectFilled( sw0, sw0 + ImVec2( 30.f, 14.f ), ImGui::GetColorU32( *v ? tok::ac : tok::line2 ), 7.f );
+			dl->AddCircleFilled( { sw0.x + ( *v ? 23.f : 7.f ), sw0.y + 7.f }, 5.f, ImGui::GetColorU32( *v ? ImVec4( 1, 1, 1, 1 ) : tok::tx3 ) );
+			ImGui::PopID( );
+		}
+
+		// segmented tab control, returns the selected index
+		inline void tabs( const char* const* names, int n, int& sel )
+		{
+			const float w = ( ImGui::GetContentRegionAvail( ).x - tok::gap * 0.5f * ( n - 1 ) ) / static_cast<float>( n );
+
+			for ( int i = 0; i < n; ++i )
+			{
+				const bool on = i == sel;
+
+				if ( i )
+					ImGui::SameLine( 0.f, tok::gap * 0.5f );
+
+				ImGui::PushStyleColor( ImGuiCol_Button, on ? tok::ac : tok::panel );
+				ImGui::PushStyleColor( ImGuiCol_ButtonHovered, on ? tok::ac : tok::line2 );
+				ImGui::PushStyleColor( ImGuiCol_ButtonActive, tok::ac2 );
+				ImGui::PushStyleColor( ImGuiCol_Text, on ? tok::tx : tok::tx2 );
+
+				if ( ImGui::Button( names[ i ], { w, 28.f } ) )
+					sel = i;
+
+				ImGui::PopStyleColor( 4 );
+			}
+		}
+
+		inline bool accent_button( const char* text, ImVec2 size )
+		{
+			ImGui::PushStyleColor( ImGuiCol_Button, tok::ac );
+			ImGui::PushStyleColor( ImGuiCol_ButtonHovered, tok::ac2 );
+			const bool pressed = ImGui::Button( text, size );
+			ImGui::PopStyleColor( 2 );
+			return pressed;
+		}
+	}
+
+	// dark violet theme: flat frames, soft rounding, tight spacing
 	static void apply_bura_style( )
 	{
 		ImGuiStyle& st = ImGui::GetStyle( );
-		st.WindowRounding = 12.f;  st.ChildRounding = 12.f; st.FrameRounding = 8.f;
-		st.PopupRounding  = 8.f;   st.GrabRounding  = 8.f;  st.TabRounding   = 8.f;
-		st.ScrollbarRounding = 8.f;
-		st.WindowPadding = { 16.f, 14.f }; st.FramePadding = { 10.f, 7.f };
-		st.ItemSpacing   = { 10.f, 9.f };  st.WindowBorderSize = 1.f; st.FrameBorderSize = 1.f;
-		st.GrabMinSize   = 14.f;
-
-		auto rgb = [ ]( int r, int g, int b, float a = 1.f ) { return ImVec4( r / 255.f, g / 255.f, b / 255.f, a ); };
-		const ImVec4 bg = rgb( 11, 11, 16 ), panel = rgb( 18, 18, 26 ), card = rgb( 23, 23, 34 ), card2 = rgb( 28, 28, 42 );
-		const ImVec4 line = rgb( 38, 38, 54 ), line2 = rgb( 49, 49, 74 );
-		const ImVec4 tx = rgb( 232, 232, 242 ), tx2 = rgb( 154, 154, 180 ), tx3 = rgb( 95, 95, 122 );
-		const ImVec4 ac = rgb( 124, 92, 252 ), ac2 = rgb( 164, 139, 255 );
+		st.WindowRounding = 12.f;  st.ChildRounding = 10.f; st.FrameRounding = 6.f;
+		st.PopupRounding  = 8.f;   st.GrabRounding  = 6.f;  st.TabRounding   = 8.f;
+		st.ScrollbarRounding = 8.f; st.ScrollbarSize = 8.f;
+		st.WindowPadding = { 14.f, 12.f }; st.FramePadding = { 8.f, 5.f };
+		st.ItemSpacing   = { 8.f, 7.f };   st.WindowBorderSize = 1.f; st.FrameBorderSize = 0.f;
+		st.ChildBorderSize = 1.f; st.GrabMinSize = 12.f;
 
 		ImVec4* c = st.Colors;
-		c[ ImGuiCol_Text ] = tx;                 c[ ImGuiCol_TextDisabled ] = tx3;
-		c[ ImGuiCol_WindowBg ] = bg;             c[ ImGuiCol_ChildBg ] = card;
-		c[ ImGuiCol_PopupBg ] = card2;           c[ ImGuiCol_Border ] = line;
-		c[ ImGuiCol_FrameBg ] = card2;           c[ ImGuiCol_FrameBgHovered ] = line2;
-		c[ ImGuiCol_FrameBgActive ] = line2;
-		c[ ImGuiCol_TitleBg ] = panel;           c[ ImGuiCol_TitleBgActive ] = panel;
-		c[ ImGuiCol_TitleBgCollapsed ] = panel;
-		c[ ImGuiCol_CheckMark ] = ac2;
-		c[ ImGuiCol_SliderGrab ] = ac;           c[ ImGuiCol_SliderGrabActive ] = ac2;
-		c[ ImGuiCol_Button ] = card2;            c[ ImGuiCol_ButtonHovered ] = ac;
-		c[ ImGuiCol_ButtonActive ] = ac2;
-		c[ ImGuiCol_Header ] = rgb( 124, 92, 252, 0.28f );
-		c[ ImGuiCol_HeaderHovered ] = rgb( 124, 92, 252, 0.45f );
-		c[ ImGuiCol_HeaderActive ] = ac;
-		c[ ImGuiCol_Tab ] = panel;               c[ ImGuiCol_TabHovered ] = rgb( 124, 92, 252, 0.55f );
-		c[ ImGuiCol_TabActive ] = ac;            c[ ImGuiCol_TabUnfocused ] = panel;
-		c[ ImGuiCol_TabUnfocusedActive ] = rgb( 124, 92, 252, 0.6f );
-		c[ ImGuiCol_Separator ] = line;          c[ ImGuiCol_ScrollbarBg ] = bg;
-		c[ ImGuiCol_ScrollbarGrab ] = line2;
-		( void )tx2;
-	}
-	Window::Window( const std::wstring& title, const ImVec2 size, ServiceHub& service_hub )
-		: size_( size ),
-		  offset_( 0, 0 ),
-		  service_hub_( &service_hub )
-	{
-		wc_ =
-		{
-			.cbSize = sizeof( wc_ ),
-			.style = CS_HREDRAW | CS_VREDRAW,
-			.lpfnWndProc = wnd_proc,
-			.hInstance = GetModuleHandleA( nullptr ),
-			.hCursor = LoadCursor( nullptr, IDC_ARROW ),
-			.lpszClassName = title.c_str( ),
-		};
-
-		if ( !RegisterClassExW( &wc_ ) )
-			throw std::runtime_error( "Failed to register window class." );
-
-		const ImVec2 screen_center
-		{
-			GetSystemMetrics( SM_CXSCREEN ) / 2 - size_.x / 2,
-			GetSystemMetrics( SM_CYSCREEN ) / 2 - size_.y / 2
-		};
-
-		hwnd_ = CreateWindow
-		(
-			wc_.lpszClassName,
-			title.c_str( ),
-			WS_POPUP | WS_VISIBLE,
-			screen_center.x,
-			screen_center.y,
-			size_.x,
-			size_.y,
-			nullptr,
-			nullptr,
-			wc_.hInstance,
-			this
-		);
-
-		if ( !hwnd_ )
-			throw std::runtime_error( "Failed to create window." );
-
-		d3d_device_ = std::make_shared<D3D11Device>( hwnd_ );
-
-		initialize_imgui( );
-
-		ShowWindow( hwnd_, SW_SHOWDEFAULT );
-		UpdateWindow( hwnd_ );
+		c[ ImGuiCol_Text ] = tok::tx;                 c[ ImGuiCol_TextDisabled ] = tok::tx3;
+		c[ ImGuiCol_WindowBg ] = tok::bg;             c[ ImGuiCol_ChildBg ] = tok::card;
+		c[ ImGuiCol_PopupBg ] = tok::card2;           c[ ImGuiCol_Border ] = tok::line;
+		c[ ImGuiCol_FrameBg ] = tok::card2;           c[ ImGuiCol_FrameBgHovered ] = tok::line2;
+		c[ ImGuiCol_FrameBgActive ] = tok::line2;
+		c[ ImGuiCol_CheckMark ] = tok::ac2;
+		c[ ImGuiCol_SliderGrab ] = tok::ac;           c[ ImGuiCol_SliderGrabActive ] = tok::ac2;
+		c[ ImGuiCol_Button ] = tok::card2;            c[ ImGuiCol_ButtonHovered ] = tok::ac;
+		c[ ImGuiCol_ButtonActive ] = tok::ac2;
+		c[ ImGuiCol_Header ] = tok::rgb( 124, 92, 252, 0.28f );
+		c[ ImGuiCol_HeaderHovered ] = tok::rgb( 124, 92, 252, 0.45f );
+		c[ ImGuiCol_HeaderActive ] = tok::ac;
+		c[ ImGuiCol_Separator ] = tok::line;          c[ ImGuiCol_ScrollbarBg ] = tok::card;
+		c[ ImGuiCol_ScrollbarGrab ] = tok::line2;
 	}
 
 	Window::~Window( )
@@ -317,7 +396,7 @@ namespace Core::UI
 			}
 
 			if ( ImGui::IsMouseDragging( ImGuiMouseButton_Left ) && offset_.second >= 0 &&
-			     offset_.second <= ImGui::GetTextLineHeight( ) + ImGui::GetStyle( ).FramePadding.y * 3.5f )
+			     offset_.second <= 52 )
 			{
 				POINT point;
 				GetCursorPos( &point );
@@ -344,196 +423,176 @@ namespace Core::UI
 			ImGui::SetNextWindowSize( size_ );
 			ImGui::SetNextWindowPos( { 0.f, 0.f } );
 
-			constexpr auto flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize;
+			constexpr auto flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
+			                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
 			ImGui::Begin( "gamerdoc lixo", nullptr, flags );
 
 			// the debug tab turns this back on every frame it is visible
 			service_hub_->get<DebugState>( )->enabled = false;
 
-			// brand header (Bura web UI): violet title + status badge
-			ImGui::TextColored( ImVec4( 0.643f, 0.545f, 1.f, 1.f ), "Bura" );
-			ImGui::SameLine( ImGui::GetWindowWidth( ) - 100.f );
-			ImGui::TextColored( ImVec4( 0.24f, 0.86f, 0.59f, 1.f ), "Running" );
-			if ( ImGui::Button( "Open web UI" ) )
-				ShellExecuteA( nullptr, "open", "http://127.0.0.1:8765", nullptr, nullptr, SW_SHOWNORMAL );
-
-			ImGui::SameLine( );
-			ImGui::TextDisabled( "http://127.0.0.1:8765" );
-			ImGui::Separator( );
-
-			if ( ImGui::BeginTabBar( "##tabs" ) )
-			{
-				if ( ImGui::BeginTabItem( "Aimbot" ) )
-				{
-					ImGui::Text( "Bind" );
-					bind_system->render_keybind_button( "Aimbot", config->aimbot_.bind );
-
-					ImGui::Checkbox( "Auto Aim (no bind)", &config->aimbot_.auto_aim );
-
-					ImGui::Text( "Fov (X)" );
-					ImGui::SliderInt( "##fov_x", &config->aimbot_.fov_x, 20, 250, "%dpx" );
-
-					ImGui::Text( "Fov (Y)" );
-					ImGui::SliderInt( "##fov_y", &config->aimbot_.fov_y, 20, 250, "%dpx" );
-
-					ImGui::Text( "Offset (X)" );
-					ImGui::SliderInt( "##offset_x", &config->aimbot_.offset_x, -15, 15, "%dpx" );
-
-					ImGui::Text( "Offset (Y)" );
-					ImGui::SliderInt( "##offset_y", &config->aimbot_.offset_y, -15, 15, "%dpx" );
-
-					ImGui::Text( "Hold (% of head, 0 = off)" );
-					ImGui::SliderInt( "##hold_pct", &config->aimbot_.hold_pct, 0, 150, "%d%%" );
-
-					ImGui::Text( "Gain (counts/px)" );
-					ImGui::SliderFloat( "##lock_gain", &config->aimbot_.lock_gain, 0.1f, 5.f, "%.2f" );
-
-					ImGui::Text( "Smooth (1 = snap)" );
-					ImGui::SliderFloat( "##smooth", &config->aimbot_.smooth, 0.1f, 1.f, "%.2f" );
-
-					ImGui::Text( "Speed (X)" );
-					ImGui::SliderFloat( "##speed_x", &config->aimbot_.speed_x, 0.2f, 3.f, "%.2f" );
-
-					ImGui::Text( "Speed (Y)" );
-					ImGui::SliderFloat( "##speed_y", &config->aimbot_.speed_y, 0.2f, 3.f, "%.2f" );
-
-					ImGui::Text( "Tolerance" );
-					ImGui::SliderInt( "##tolerance", &config->aimbot_.tolerance, 0, 60 );
-
-					ImGui::Checkbox( "Anti-Strafe", &config->aimbot_.anti_strafe );
-					ImGui::Checkbox( "Humanize", &config->aimbot_.humanize );
-					ImGui::Checkbox( "Legit", &config->aimbot_.legit );
-
-					ImGui::Text( "Reaction delay" );
-					ImGui::SliderInt( "##reaction", &config->aimbot_.reaction_ms, 0, 150, "%dms" );
-
-					ImGui::Text( "Settle" );
-					ImGui::SliderInt( "##lock_settle", &config->aimbot_.lock_settle_ms, 1, 30, "%dms" );
-
-					ImGui::EndTabItem( );
-				}
-
-				if ( ImGui::BeginTabItem( "Trigger" ) )
-				{
-					ImGui::Text( "Bind" );
-					bind_system->render_keybind_button( "Trigger", config->trigger_.bind );
-
-					ImGui::Checkbox( "Move Check", &config->trigger_.move_check );
-
-					ImGui::Text( "Scan Area" );
-					ImGui::SliderInt( "##scan_area", &config->trigger_.scan_area, 1, 30, "%dpx" );
-
-					ImGui::Text( "Delay" );
-					ImGui::SliderInt( "##delay", &config->trigger_.delay, 1, 300, "%dms" );
-
-					ImGui::EndTabItem( );
-				}
-
-				if ( ImGui::BeginTabItem( "Debug" ) )
-					{
-						render_debug_tab( );
-						ImGui::EndTabItem( );
-					}
-
-					if ( ImGui::BeginTabItem( "Settings" ) )
-				{
-					ImGui::Text( "Target Color" );
-					const char* items[ ] = { "Magenta (Tritanopia)", "Yellow (Deuteranopia/Protanopia)", "Red (Default)" };
-					ImGui::Combo( "##colors", &config->settings_.color, items, IM_ARRAYSIZE( items ) );
-
-					ImGui::Text( "Input" );
-					const char* backends[ ] = { "SendInput (local)", "Makcu (serial)", "Medius (capi dll)" };
-					ImGui::Combo( "##backend", &config->settings_.input_backend, backends, IM_ARRAYSIZE( backends ) );
-
-					if ( config->settings_.input_backend == 1 )
-					{
-						ImGui::Text( "COM port" );
-
-						if ( ImGui::InputText( "##com_port", com_buf, sizeof( com_buf ) ) )
-							config->settings_.com_port = com_buf;
-					}
-
-					if ( ImGui::Button( "Apply input" ) )
-					{
-						mouse->configure( config->settings_.input_backend, config->settings_.com_port );
-					}
-
-					ImGui::NewLine( );
-
-					if ( ImGui::Button( "Copy config to clipboard" ) )
-					{
-						ImGui::SetClipboardText( config->export_to_str( ).c_str( ) );
-					}
-
-					if ( ImGui::Button( "Import config from clipboard" ) )
-					{
-						const auto text   = ImGui::GetClipboardText( );
-						const auto result = config->import_from_str( text );
-
-						if ( result )
-						{
-							strncpy_s( com_buf, config->settings_.com_port.c_str( ), _TRUNCATE );
-							mouse->configure( config->settings_.input_backend, config->settings_.com_port );
-						}
-
-						if ( !result )
-						{
-							MessageBoxA( nullptr, "Failed to import config!", " ", MB_OK | MB_ICONERROR );
-						}
-					}
-
-					if ( ImGui::Button( "Close" ) )
-					{
-						close( );
-					}
-
-					ImGui::EndTabItem( );
-				}
-
-				ImGui::EndTabBar( );
-			}
-
-			const float text_height      = ImGui::GetTextLineHeightWithSpacing( );
-			const float available_height = ImGui::GetContentRegionAvail( ).y;
-
-			ImGui::SetCursorPosY( ImGui::GetCursorPosY( ) + available_height - text_height );
-			ImGui::Separator( );
-
+			// connection state, polled every 3s (reconnects when it drops)
 			static constexpr double check_interval = 3.0;
 			static double last_check_time          = -check_interval;
 			static bool is_connected_cached        = false;
 
-			const double current_time = ImGui::GetTime( );
-
-			if ( current_time - last_check_time >= check_interval )
+			if ( const double now = ImGui::GetTime( ); now - last_check_time >= check_interval )
 			{
 				is_connected_cached = mouse->is_connected( );
-				last_check_time     = current_time;
+				last_check_time     = now;
 
 				if ( !is_connected_cached )
-				{
 					mouse->connect( );
-				}
 			}
 
-			ImGui::Text( "Input Status:" );
-			ImGui::SameLine( );
-
-			if ( is_connected_cached )
+			// ---- header: logo, title, status, web, close ----
 			{
-				ImGui::TextColored( ImVec4( 0.0f, 1.0f, 0.0f, 1.0f ), "Connected" );
+				const float W  = ImGui::GetWindowWidth( );
+				const float y  = ImGui::GetCursorPosY( );
+				const ImVec2 p = ImGui::GetCursorScreenPos( );
+				auto* dl       = ImGui::GetWindowDrawList( );
+
+				dl->AddRectFilled( p, p + ImVec2( 30.f, 30.f ), ImGui::GetColorU32( tok::ac ), 9.f );
+				const ImVec2 bs = ImGui::CalcTextSize( "B" );
+				dl->AddText( { p.x + ( 30.f - bs.x ) * 0.5f, p.y + ( 30.f - bs.y ) * 0.5f }, IM_COL32_WHITE, "B" );
+
+				ImGui::SetCursorScreenPos( { p.x + 40.f, p.y - 1.f } );
+				ImGui::BeginGroup( );
+				ImGui::TextColored( tok::tx, "Bura" );
+				ImGui::TextColored( tok::tx3, "color tracking" );
+				ImGui::EndGroup( );
+
+				ImGui::SetCursorPos( { W - 14.f - 26.f, y + 2.f } );
+
+				ImGui::PushStyleColor( ImGuiCol_ButtonHovered, tok::bad );
+
+				if ( ImGui::Button( "x", { 26.f, 26.f } ) )
+					close( );
+
+				ImGui::PopStyleColor( );
+
+				ImGui::SetCursorPos( { W - 14.f - 26.f - 8.f - 44.f, y + 2.f } );
+
+				if ( ImGui::Button( "Web", { 44.f, 26.f } ) )
+					ShellExecuteA( nullptr, "open", "http://127.0.0.1:8765", nullptr, nullptr, SW_SHOWNORMAL );
+
+				if ( ImGui::IsItemHovered( ) )
+					ImGui::SetTooltip( "Open the web UI (127.0.0.1:8765)" );
+
+				const char* st  = is_connected_cached ? "Connected" : "No input";
+				const float tw  = ImGui::CalcTextSize( st ).x;
+				const float sx  = W - 14.f - 26.f - 8.f - 44.f - 14.f - tw - 14.f;
+				const ImVec2 sp = ImGui::GetWindowPos( );
+				ImGui::SetCursorPos( { sx + 14.f, y + 6.f } );
+				ImGui::TextColored( is_connected_cached ? tok::ok : tok::bad, "%s", st );
+				dl->AddCircleFilled( { sp.x + sx + 4.f, sp.y + y + 2.f + 13.f }, 4.f,
+				                     ImGui::GetColorU32( is_connected_cached ? tok::ok : tok::bad ) );
+
+				ImGui::SetCursorPos( { ImGui::GetStyle( ).WindowPadding.x, y + 36.f } );
+			}
+
+			// ---- tabs ----
+			static int tab = 0;
+			static const char* const tab_names[ ] = { "Aimbot", "Trigger", "Debug", "Settings" };
+			ui::tabs( tab_names, 4, tab );
+
+			// ---- body (scrolls if the window is shrunk) ----
+			ImGui::BeginChild( "##body", { 0.f, -26.f }, 1 );
+			auto& ab = config->aimbot_;
+
+			if ( tab == 0 )
+			{
+				static const char* const colors[ ] = { "Magenta", "Yellow", "Red" };
+
+				ui::section( "TARGET" );
+				ui::combo( "Color", &config->settings_.color, colors, 3 );
+				ui::slider_i( "Tolerance", &ab.tolerance, 0, 60 );
+
+				ui::section( "AIM" );
+				ui::label( "Bind" );
+				bind_system->render_keybind_button( "Aimbot", ab.bind, true, { -1.f, 0.f } );
+				ui::pair_i( "FOV", &ab.fov_x, "X %dpx", &ab.fov_y, "Y %dpx", 20, 250 );
+				ui::pair_i( "Offset", &ab.offset_x, "X %dpx", &ab.offset_y, "Y %dpx", -15, 15 );
+
+				ui::section( "MOTION" );
+				ui::pair_f( "Gain / Smooth", &ab.lock_gain, "G %.2f", &ab.smooth, "S %.2f", 0.1f, 5.f );
+				ab.smooth = std::min( ab.smooth, 1.f );
+				ui::pair_f( "Speed", &ab.speed_x, "X %.2f", &ab.speed_y, "Y %.2f", 0.2f, 3.f );
+
+				ui::section( "TIMING" );
+				ui::slider_i( "Hold", &ab.hold_pct, 0, 150, "%d%% of head" );
+				ui::pair_i( "React / Settle", &ab.reaction_ms, "%dms", &ab.lock_settle_ms, "%dms", 0, 150 );
+				ab.lock_settle_ms = std::clamp( ab.lock_settle_ms, 1, 30 );
+
+				ui::section( "BEHAVIOUR" );
+				const float cw = ( ImGui::GetContentRegionAvail( ).x - tok::gap ) * 0.5f;
+				ui::toggle( "Auto aim", &ab.auto_aim, cw );
+				ImGui::SameLine( 0.f, tok::gap );
+				ui::toggle( "Legit", &ab.legit, cw );
+				ui::toggle( "Anti-Strafe", &ab.anti_strafe, cw );
+				ImGui::SameLine( 0.f, tok::gap );
+				ui::toggle( "Humanize", &ab.humanize, cw );
+			}
+			else if ( tab == 1 )
+			{
+				ui::section( "TRIGGER" );
+				ui::label( "Bind" );
+				bind_system->render_keybind_button( "Trigger", config->trigger_.bind, true, { -1.f, 0.f } );
+				ui::slider_i( "Scan area", &config->trigger_.scan_area, 1, 30, "%dpx" );
+				ui::slider_i( "Delay", &config->trigger_.delay, 1, 300, "%dms" );
+				ui::toggle( "Move check", &config->trigger_.move_check );
+			}
+			else if ( tab == 2 )
+			{
+				render_debug_tab( );
 			}
 			else
 			{
-				ImGui::TextColored( ImVec4( 1.0f, 0.0f, 0.0f, 1.0f ), "Disconnected" );
+				static const char* const backends[ ] = { "SendInput (local)", "Makcu (serial)", "Medius (capi dll)" };
+
+				ui::section( "INPUT" );
+				ui::combo( "Device", &config->settings_.input_backend, backends, 3 );
+
+				if ( config->settings_.input_backend == 1 )
+				{
+					ui::label( "COM port" );
+					ImGui::SetNextItemWidth( -1.f );
+
+					if ( ImGui::InputText( "##com_port", com_buf, sizeof( com_buf ) ) )
+						config->settings_.com_port = com_buf;
+				}
+
+				if ( ui::accent_button( "Apply input", { -1.f, 30.f } ) )
+					mouse->configure( config->settings_.input_backend, config->settings_.com_port );
+
+				ui::section( "CONFIG" );
+				const float bw = ( ImGui::GetContentRegionAvail( ).x - tok::gap ) * 0.5f;
+
+				if ( ImGui::Button( "Copy to clipboard", { bw, 28.f } ) )
+					ImGui::SetClipboardText( config->export_to_str( ).c_str( ) );
+
+				ImGui::SameLine( 0.f, tok::gap );
+
+				if ( ImGui::Button( "Import from clipboard", { bw, 28.f } ) )
+				{
+					const auto result = config->import_from_str( ImGui::GetClipboardText( ) );
+
+					if ( result )
+					{
+						strncpy_s( com_buf, config->settings_.com_port.c_str( ), _TRUNCATE );
+						mouse->configure( config->settings_.input_backend, config->settings_.com_port );
+					}
+					else
+					{
+						MessageBoxA( nullptr, "Failed to import config!", " ", MB_OK | MB_ICONERROR );
+					}
+				}
 			}
 
-			if ( config->settings_.input_backend == 1 )
-			{
-				ImGui::SameLine( );
-				ImGui::TextDisabled( "(%s)", mouse->status( ).c_str( ) );
-			}
+			ImGui::EndChild( );
+
+			// ---- footer ----
+			ImGui::TextColored( tok::tx3, "Input: %s", mouse->status( ).c_str( ) );
 
 			ImGui::End( );
 

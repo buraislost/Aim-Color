@@ -66,7 +66,7 @@ public:
 			const auto window = std::make_shared<Core::UI::Window>
 			(
 				L" ",
-				ImVec2( 600.f, 560.f ),
+				ImVec2( 450.f, 640.f ),
 				*service_hub_
 			);
 
