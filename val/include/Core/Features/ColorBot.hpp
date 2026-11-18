@@ -101,6 +101,8 @@ namespace Core::Features
 		Clock::time_point acquired_at_ = { };
 		double reaction_ms_            = 0.0;
 		Clock::time_point last_move_   = { };
+		double last_ex_ = 0.0;
+		double last_ey_ = 0.0;
 		double rem_x_                  = 0.0; // sub-count remainder carried to the next report
 		double rem_y_                  = 0.0;
 		std::deque<Sent> sent_;

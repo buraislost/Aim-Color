@@ -312,6 +312,8 @@ namespace Core::Features
 	//  - +-10% random on each step, and a configurable (0-150ms) reaction before the first one, so it does not look scripted
 	//  - fractions of a count are carried over, small errors close smoothly instead of flipping between 0 and 1
 	// counts = error * gain * smooth * ease; gain converts screen px to mouse counts (depends on in-game sens).
+	constexpr double MAX_STEP_FRAC = 0.9; // never ask for more than 90% of the remaining error in one step
+
 	void ColorBot::aim( const cv::Point2d& delta, const double head_h, const double px_scale )
 	{
 		const auto now = Clock::now( );
@@ -360,10 +362,19 @@ namespace Core::Features
 
 		const double ref  = std::max( 8.0 * px_scale, 1.5 * head_h );
 		const double ease = std::clamp( dist / ref, EASE_MIN, 1.0 );
-		const double k    = gain * smooth * ease * ( ab.humanize ? rand_real( 0.9, 1.1 ) : 1.0 );
+		// gain only converts px to mouse counts (calibration). how fast we close the gap is a FRACTION of the
+		// error per step, capped below 1: a fraction >= 1 overshoots and the sign flip is the jitter.
+		// if the sign flipped since the last step we overshot, so damp this step.
+		const double jit  = ab.humanize ? rand_real( 0.9, 1.1 ) : 1.0;
+		const double damp = ( ex * last_ex_ < 0.0 || ey * last_ey_ < 0.0 ) ? 0.5 : 1.0;
+		const double frac_x = std::min( smooth * ease * spd_x * jit * damp, MAX_STEP_FRAC );
+		const double frac_y = std::min( smooth * ease * spd_y * jit * damp, MAX_STEP_FRAC );
 
-		const double fx = ex * k * spd_x + rem_x_;
-		const double fy = ey * k * spd_y + rem_y_;
+		last_ex_ = ex;
+		last_ey_ = ey;
+
+		const double fx = ex * gain * frac_x + rem_x_;
+		const double fy = ey * gain * frac_y + rem_y_;
 
 		auto ix = static_cast<std::int32_t>( std::lround( fx ) );
 		auto iy = static_cast<std::int32_t>( std::lround( fy ) );
